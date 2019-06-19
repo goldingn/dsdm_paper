@@ -33,24 +33,24 @@ apply_link <- function (link_function, matrix) {
 # blank function for no link/transformation
 none <- function (x) x
 
-# construct and integrate over (each slice representing a kernel matrix for a
-# given slice, in) a kernel array for a transition with a normal distribution.
-# given a matrix of means at sites and sizes (n_sites x matrix_dim), a scalar
-# standard deviation for the distribution, a vector of sizes to integrate over
-# (of length matrix_dim), and the integration bin size, return a kernel array
-# (n_sites x matrix_dim x matrix_dim)
-integrate_kernel <- function (mean_matrix, sd, sizes, bin_width) {
+# construct kernel array for transitions with normal distributions, where each
+# slice of the array represents a kernel matrix for a given site. Given a matrix
+# of means at sites and sizes (n_sites x matrix_dim), a scalar standard
+# deviation for the distribution, a vector of sizes to integrate over (of length
+# matrix_dim), and the integration bin size, return a kernel array (n_sites x
+# matrix_dim x matrix_dim) giving the transition probabilities in all cells.
+distribution_kernel <- function (mean_matrix, sd, sizes, bin_width) {
   n_sites <- nrow(mean_matrix)
   matrix_dim <- ncol(mean_matrix)
+  # work with the log density for computational stability
   var <- sd ^ 2
-  constant <- 1 / (sqrt(2 * pi * var))
-  # diff is a matrix with dimensions (n_sites * matrix_dim) x matrix_dim. We'll
-  # reshape it last (need to add tests for these operations as they are easy to
-  # cock up!)
+  log_constant <- -0.5 * log(2 * pi) - log(sd)
+  # diff is created as a matrix with dimensions (n_sites * matrix_dim) x matrix_dim, so we
+  # reshape it (to n_sites x matrix_dim x matrix_dim)
   diff <- kronecker(sizes, mean_matrix, FUN = "-")
-  density <- bin_width * constant * exp((diff ^ 2) / (2 * var))
-  dim(density) <- c(n_sites, matrix_dim, matrix_dim)
-  density
+  dim(diff) <- c(n_sites, matrix_dim, matrix_dim)
+  log_density <- log(bin_width) + log_constant - (diff ^ 2) / (2 * var)
+  exp(log_density)
 }
 
 # use greta::calculate() to sanity check the effects of different parameter
@@ -147,21 +147,21 @@ build_model <- function (occurrence) {
 
   # get growth and offspring size transition probabilities (integrating over
   # discretized normal distributions) to return kernel arrays
-  growth_density <- integrate_kernel(
+  growth_density <- distribution_kernel(
     mean_matrix = matrices$growth,
     sd = growth_sd,
     sizes = sizes,
     bin_width = bin_width
   )
 
-  offspring_size_density <- integrate_kernel(
+  offspring_size_density <- distribution_kernel(
     mean_matrix = matrices$offspring_size,
     sd = offspring_size_sd,
     sizes = sizes,
     bin_width = bin_width
   )
 
-  # need to reshape these as matrices, multiply by other kernel components,
+  # need to reshape these as matrices ((n_sites * matrix_dim) x matrix_dim), multiply by other kernel components,
   # sweep-divide by density sums to do integration, then reshape back again
   # phew!
 
@@ -218,13 +218,13 @@ run_mcmc <- function (model_list) {
 }
 
 # use the model and MCMC parameter samples to visualise the fitted vital rate
-# relationships
+# relationships (using calculate and relevant design matrices)
 plot_relationships <- function(draws, model_list, occurrence) {
 
 }
 
 # use the model and MCMC parameter samples to make posterior predictions of
-# the probability of presence in new places
+# the probability of presence in new places (using calculate and relevant design matrices)
 make_predictions <- function(draws, model_list, occurrence) {
 
 }
