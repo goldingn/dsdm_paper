@@ -1,5 +1,6 @@
 .Rproj.user
-
-data/raw/*.RData
-
+.drake
+*.pdf
+*.RData
+*.RDS
 *.png
