@@ -36,16 +36,18 @@ tidy_merow <- function (file_path) {
   # Mean fire return time - mean.tsf
 
   cfr.env %>%
-    select(
+    dplyr::select(
+      lon,
+      lat,
       presence = Presence_5x5,
       abundance = MaxAbun,
       abundance_class = MaxAbunClass,
       min_temp_july = min07,
+      fire_return = mean.tsf,
       summer_smd = smdsum,
       winter_smd = smdwin,
       prop_acidic = ph1,
-      prop_fertile = fert4,
-      fire_return = mean.tsf
+      prop_fertile = fert4
     ) -> occurrence
 
   occurrence
