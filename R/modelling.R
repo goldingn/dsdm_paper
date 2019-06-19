@@ -65,6 +65,31 @@ check_vals <- function (name, beta_values = NULL, coef_value = NULL) {
   calculate(matrices[[name]], list(beta = beta_vals, coef = coef_val))
 }
 
+# need to combine the survival components, with linear interpolation in the size
+# range in which adults and seedlings overlap. do that by building a weighting
+# data vector and doing a weighted sum of the two
+interpolate_survival <- function (adult_survival_matrix,
+                                  seedling_survival_matrix,
+                                  sizes,
+                                  adult_min_size = 0.182,
+                                  seedling_max_size = 0.728) {
+
+  # build weights vector
+  range <- seedling_max_size - adult_min_size
+  weights <- seedling_max_size / range  - (sizes / range)
+  weights[sizes > seedling_max_size] <- 0
+  weights[sizes <= adult_min_size] <- 1
+
+  # apply weights
+  weighted_seedling_survival_matrix <- sweep(seedling_survival_matrix, 2, weights, FUN = "*")
+  weighted_adult_survival_matrix <- sweep(adult_survival_matrix, 2, 1 - weights, FUN = "*")
+
+  # sum and return
+  survival_matrix <- weighted_seedling_survival_matrix + weighted_adult_survival_matrix
+  survival_matrix
+
+}
+
 # build and return a greta model for the DSDM
 build_model <- function (occurrence) {
 
@@ -161,17 +186,28 @@ build_model <- function (occurrence) {
     bin_width = bin_width
   )
 
-  # need to reshape these as matrices ((n_sites * matrix_dim) x matrix_dim), multiply by other kernel components,
-  # sweep-divide by density sums to do integration, then reshape back again
-  # phew!
+  # combine adult and seedling survival rates into one
+  matrices$survival <- interpolate_survival(
+      adult_survival_matrix = matrices$adult_survival,
+      seedling_survival_matrix = matrices$seedling_survival,
+      sizes = sizes
+  )
 
+  # need to reshape these as matrices ((n_sites * matrix_dim) x matrix_dim),
+  # multiply by other kernel components, sweep-divide by density sums to do
+  # integration, then reshape back again. phew! difficult bit will be reshaping
+  # so that we can sum along the right dimension (and working outr which side
+  # that is!)
 
-  a <- matrix(1:6, 3, 2)
-  b <- (1:2) / 10
-  c <- kronecker(b, a, FUN = "+")
-  dim(c) <- c(3, 2, 2)
-  c[1, , ]
+  # adapt this from Merow (Appendix C, p14);  P is growth_density
 
+  # P=h*outer(y,y,gr,gr.params.mean,gr.params.sd,tenv)
+  # # survival
+  # S=sv(y,sv.s.params,sv.a.params,tenv)
+  # # growth/survival kernel
+  # Ps=matrix(rep(apply(P,2,sum),n.matrix),byrow=T,nrow=n.matrix)
+  # Ss=matrix(rep(S,n.matrix),byrow=T,nrow=n.matrix)
+  # P=(Ss*P)/Ps
 
 
   # integrate over growth function to get growth array G
