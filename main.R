@@ -14,6 +14,9 @@ library(raster)
 library(RColorBrewer)
 library(dplyr)
 
+# modelling
+library(greta.dynamics)
+
 # read in data ------------------------------------------------------------
 
 source("R/fetch_data.R")
@@ -26,8 +29,6 @@ read_data <- drake_plan(
 
 make(read_data)
 
-
-
 # plot data  --------------------------------------------------------
 
 source("R/plotting.R")
@@ -39,3 +40,18 @@ plot_data <- drake_plan(
 )
 
 make(plot_data)
+
+
+# fit model ---------------------------------------------------------------
+
+source("R/modelling.R")
+
+fit_model <- drake_plan(
+  occurrence = readRDS(file_in("data/clean/occurrence.RDS")),
+  model = build_model(occurrence),
+  draws = run_mcmc(model_list),
+  relationships_fig = plot_relationships(model_list, draws, occurrence),
+  predictions = make_predictions(model_list, draws, occurrence)
+)
+
+make(fit_model)

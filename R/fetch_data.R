@@ -44,10 +44,11 @@ tidy_merow <- function (file_path) {
       abundance_class = MaxAbunClass,
       min_temp_july = min07,
       fire_return = mean.tsf,
+      prop_acidic = ph1,
+      prop_fertile = fert4,
       summer_smd = smdsum,
       winter_smd = smdwin,
-      prop_acidic = ph1,
-      prop_fertile = fert4
+      mean_annual_precip = map
     ) -> occurrence
 
   occurrence

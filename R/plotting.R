@@ -37,7 +37,7 @@ plot_covs <- function (occurrence, filename) {
   on.exit(dev.off())
   png(filename,
       width = 1000 * 2,
-      height = 700 * 3,
+      height = 700 * 4,
       pointsize = 30)
 
   covs <- colnames(occurrence)[-(1:5)]
@@ -49,7 +49,8 @@ plot_covs <- function (occurrence, filename) {
     winter_smd = pal("YlGnBu"),
     prop_acidic = pal("PuRd"),
     prop_fertile = pal("YlGn"),
-    fire_return = pal("Reds", TRUE)
+    fire_return = pal("Reds", TRUE),
+    mean_annual_precip = pal("Blues")
   )
 
   titles <- list(
@@ -58,13 +59,14 @@ plot_covs <- function (occurrence, filename) {
     winter_smd = "soil moisture days in winter",
     prop_acidic = "proportion soil acidic",
     prop_fertile = "proportion soil highly fertile",
-    fire_return = "mean fire return time"
+    fire_return = "mean fire return time",
+    mean_annual_precip = "mean annual precipitation"
   )
 
   # temporarily set the plot panel configuration
   mfrow <- par()$mfrow
   on.exit(par(mfrow = mfrow), add = TRUE)
-  par(mfrow = c(3, 2))
+  par(mfrow = c(4, 2))
   for (cov in covs) {
     plot_cov(
       coords = coords,
