@@ -1,0 +1,5 @@
+.Rproj.user
+
+data/raw/*.RData
+
+*.png
