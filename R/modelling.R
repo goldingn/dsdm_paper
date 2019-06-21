@@ -252,6 +252,10 @@ build_model <- function (occurrence, informative_priors = FALSE) {
     adult_survival = ilogit,
     seedling_survival = ilogit
   )
+  # N.B. we want germination probability to be constrained 0-1, but it was not
+  # estimated from a logit model so the estimates in the data are a
+  # logit-transformed version of the estimates in the paper and are transformed
+  # back here
 
   matrices <- mapply(
     apply_link,

@@ -25,7 +25,7 @@ seedheads,min_temp_july,-0.272,-0.401,-0.156
 seedheads,quad(prop_acidic)_raw,0.347,0.163,0.54
 seedheads,quad(prop_acidic)_squared,-0.428,-0.652,-0.236
 seeds,(Intercept),4.156,4.075,4.241
-germination,(Intercept),0.01,0.009,0.012
+germination,(Intercept),-4.598,-4.759,-4.454
 offspring_size,(Intercept),0.163,0.137,0.193
 offspring_size,prop_acidic,-0.02,-0.035,-0.002
 offspring_size,quad(prop_fertile)_raw,-0.054,-0.091,-0.019
