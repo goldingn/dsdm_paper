@@ -1,7 +1,7 @@
 # load the parameter estimates from Merow et al. and format them as the
 # parameters of normal priors
-prior <- function (model = c("growth", "flowering", "seedheads", "seeds",
-                             "offspring_size", "adult_survival", "seedling_survival"),
+prior <- function (model = c("seedling_survival", "adult_survival", "growth",
+                             "flowering", "seedheads", "seeds", "germination", "offspring_size"),
                    type = c("environment", "size"),
                    informative = TRUE) {
 
@@ -72,7 +72,17 @@ get_env_effect <- function (formula, prior, data) {
   }
 
   beta <- normal(prior$mean, prior$sd)
+
+  # # for intercept-only models, don't multiply by the intercept column, it's mode
+  # # efficient (when combining the kernels) to return just the scalar
+  # if (identical(data_names, "(Intercept)")) {
+  #   env_effect <- beta
+  # } else {
+  #   env_effect <- design %*% beta
+  # }
+
   env_effect <- design %*% beta
+
   list(beta = beta, env_effect = env_effect)
 }
 
@@ -153,6 +163,23 @@ interpolate_survival <- function (adult_survival_matrix,
 
 }
 
+# given an n x m x m array A, and an n x m matrix B, sweep B along the third
+# dimension of A using the function FUN, to yield an array with the same
+# dimensions as A . Note that this is only necessary because greta's sweep
+# doesn't yet handle arrays (with more than 2 dimensions), otherwise we could
+# just do: sweep(A, B, MARGIN = c(1, 3), FUN = FUN)
+sweep_3 <- function(A, B, FUN = c('-', '+', '/', '*')) {
+  n <- dim(A)[1]
+  m <- dim(A)[2]
+  Al <- aperm(A, c(2, 3, 1))
+  dim(Al) <- c(m, n * m)
+  Bl <- t(B)
+  dim(Bl) <- n * m
+  C <- sweep(Al, 2, Bl, FUN)
+  dim(C) <- c(m, m, n)
+  aperm(C, c(3, 1, 2))
+}
+
 # build and return a greta model for the DSDM
 build_model <- function (occurrence, informative_priors = FALSE) {
 
@@ -164,13 +191,14 @@ build_model <- function (occurrence, informative_priors = FALSE) {
 
   # formulae for the *environmental components* of the vital rate regressions
   formulae <- list(
+    seedling_survival = ~ min_temp_july + mean_annual_precip,
+    adult_survival = ~ min_temp_july + mean_annual_precip,
     growth = ~ quad(prop_fertile) + quad(winter_smd) + quad(prop_acidic) + min_temp_july + quad(summer_smd),
     flowering = ~ 1,
     seedheads = ~ min_temp_july + quad(prop_acidic),
     seeds = ~ 1,
-    offspring_size = ~ prop_acidic + quad(prop_fertile) + min_temp_july + quad(summer_smd),
-    adult_survival = ~ min_temp_july + mean_annual_precip,
-    seedling_survival = ~ min_temp_july + mean_annual_precip
+    germination = ~ 1,
+    offspring_size = ~ prop_acidic + quad(prop_fertile) + min_temp_july + quad(summer_smd)
   )
 
   beta_priors <- lapply(
@@ -179,6 +207,7 @@ build_model <- function (occurrence, informative_priors = FALSE) {
     type = "environment",
     informative = informative_priors
   )
+  names(beta_priors) <- names(formulae)
 
   # for each formula, get the vector of coefficients and environmental effects
   env_effects_list <- mapply(
@@ -201,13 +230,14 @@ build_model <- function (occurrence, informative_priors = FALSE) {
 
   # get size effects for flowering probability, seedheads, and both survivals
   size_dependent <- list(
+    seedling_survival = TRUE,
+    adult_survival = TRUE,
     growth = FALSE,
     flowering = TRUE,
     seedheads = TRUE,
     seeds = FALSE,
-    offspring_size = FALSE,
-    adult_survival = TRUE,
-    seedling_survival = TRUE
+    germination = FALSE,
+    offspring_size = FALSE
   )
 
   size_priors <- lapply(
@@ -227,7 +257,6 @@ build_model <- function (occurrence, informative_priors = FALSE) {
   size_coefs <- lapply(size_effects_list, `[[`, "coef")
   size_effects <- lapply(size_effects_list, `[[`, "size_effect")
 
-
   # There's a deterministic effect of size on growth; we need to add the origin
   # size onto the (environmentally-driven) growth increment to get the
   # destination size. most efficient to do that here.
@@ -244,13 +273,14 @@ build_model <- function (occurrence, informative_priors = FALSE) {
 
   # transform to parameters to the response scale to build kernel array
   link_functions <- list(
+    seedling_survival = ilogit,
+    adult_survival = ilogit,
     growth = none,
     flowering = ilogit,
     seedheads = exp,
     seeds = exp,
-    offspring_size = none,
-    adult_survival = ilogit,
-    seedling_survival = ilogit
+    germination = ilogit,
+    offspring_size = none
   )
   # N.B. we want germination probability to be constrained 0-1, but it was not
   # estimated from a logit model so the estimates in the data are a
@@ -263,7 +293,7 @@ build_model <- function (occurrence, informative_priors = FALSE) {
     SIMPLIFY = FALSE
   )
 
-  # get coefficients for variation in growth and offspring size
+  # get coefficients for variation in growth and offspring size (priors for these?)
   growth_sd <- normal(0, 10, truncation = c(0, Inf))
   offspring_size_sd <- normal(0, 10, truncation = c(0, Inf))
 
@@ -290,45 +320,47 @@ build_model <- function (occurrence, informative_priors = FALSE) {
       sizes = sizes
   )
 
-  # need to reshape these as matrices ((n_sites * matrix_dim) x matrix_dim),
-  # multiply by other kernel components, sweep-divide by density sums to do
-  # integration, then reshape back again. phew! difficult bit will be reshaping
-  # so that we can sum along the right dimension (and working out which side
-  # that is!)
+  # sweep the vector (matrix) components through the matrix (array) components
+  # to build the kernel matrices (arrays)
 
+  # get normalisations for the columns in the growth kernel, so we can make them
+  # sum to 1 (to complete the integration)
+  growth_normalisation <- apply(growth_density, c(1, 3), "sum")
 
+  # Merow has:
+  # (Ss*P)/Ps = (matrices$survival * growth_density) / growth_normalisation
+  # the following (P * (Ss / Ps)) is the same but in fewer FLOPs.
+  # sweep_3 is a custom function to do an array-matrix sweep on the third
+  # dimension (columns of each matrix).
+  P_array <- sweep_3(
+    growth_density,
+    matrices$survival / growth_normalisation,
+    FUN = "*"
+  )
 
-  # adapt this from Merow (Appendix C, p14);  P is growth_density
+  # get normalisations for the columns in the offspring size kernel, so we can
+  # make them sum to 1 (to complete the integration)
+  offspring_size_normalisation <- apply(offspring_size_density, c(1, 3), "sum")
 
-  # P=h*outer(y,y,gr,gr.params.mean,gr.params.sd,tenv)
-  # # survival
-  # S=sv(y,sv.s.params,sv.a.params,tenv)
-  # # growth/survival kernel
-  # Ps=matrix(rep(apply(P,2,sum),n.matrix),byrow=T,nrow=n.matrix)
-  # Ss=matrix(rep(S,n.matrix),byrow=T,nrow=n.matrix)
-  # P=(Ss*P)/Ps
+  # build fecundity kernel
+  # environment:
+  matrices$recruits <- matrices$flowering * matrices$seedheads *
+    matrices$seeds * matrices$germination
 
+  F_array <- sweep_3(
+    offspring_size_density,
+    matrices$recruits / offspring_size_normalisation,
+    FUN = "*"
+  )
 
-  # integrate over growth function to get growth array G
-
-
-
-  # integrate over offspring size function to get offspring size array O
-
-  # apply survival probabilities S to G, to get P (growth /survival subkernel)
-
-
-
-  # build the kernel array across observation locations
-
-
-
-
+  # combine into a single kernel
+  kernel_array <- P_array + F_array
 
   # get the intrinsic growth rate for each location
-  greta.dynamics::iterate_matrix(kernel_array)
+  iterations <- greta.dynamics::iterate_matrix(kernel_array)
 
   # form the likelihood
+  log_lambda <- log(iterations$lambda)
   log_rate <- log_lambda + intercept
   p_present <- icloglog(log_rate)
   distribution(occurrence$presence) <- binomial(p_present)
