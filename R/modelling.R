@@ -1,3 +1,53 @@
+# load the parameter estimates from Merow et al. and format them as the
+# parameters of normal priors
+prior <- function (model = c("growth", "flowering", "seedheads", "seeds",
+                             "offspring_size", "adult_survival", "seedling_survival"),
+                   type = c("environment", "size"),
+                   informative = TRUE) {
+
+  # match the arguments
+  model <- match.arg(model)
+  type <- match.arg(type)
+
+  # load parameter estimates
+  estimates <- read.csv("data/clean/parameter_estimates.csv")
+
+  # subset to model of interest (and drop model column)
+  estimates <- estimates[estimates$model == model, -1]
+
+  # if they want the size coefficient, check it's available and use that if so. retun a NULL if not
+  if (type == "size") {
+    estimates <- estimates[estimates$parameter == "size", ]
+    if (nrow(estimates) == 0) {
+      return(NULL)
+    }
+  } else {
+    # otherwise remove the size coefficient (if it was there at all)
+    estimates <- estimates[estimates$parameter != "size", ]
+  }
+
+  # pull out means
+  means <- estimates$mean
+
+  # get approximate standard deviations for these parameters
+  sds <- with(
+    estimates,
+    ((upper - mean) + (mean - lower) / 2) / 1.96
+  )
+
+  names(means) <- names(sds) <- estimates$parameter
+
+  # if we wanted non-informative ones, replace them now (so that we have the names)
+  if (!informative) {
+    means[] <- 0
+    sds[] <- 10
+  }
+
+  list(mean = means,
+       sd = sds)
+
+}
+
 # return a quadratic version of a variable, for building design matrices
 quad <- function (x) {
   call <- match.call()
@@ -9,20 +59,33 @@ quad <- function (x) {
 
 # given a formula, return a greta array of regression coefficients, and a vector
 # of them multiplied by their corresponding design matrix. Retrun both in a list
-get_env_effect <- function (formula, data) {
+get_env_effect <- function (formula, prior, data) {
+
   design <- model.matrix(formula, data)
-  beta <- normal(0, 10, dim = ncol(design))
+
+  # check the prior names line up with the design matrix
+  prior_names <- names(prior$mean)
+  data_names <- colnames(design)
+  if (!identical(prior_names, data_names)) {
+    stop ("name mismatch between prior and design matrix",
+          call. = FALSE)
+  }
+
+  beta <- normal(prior$mean, prior$sd)
   env_effect <- design %*% beta
   list(beta = beta, env_effect = env_effect)
 }
 
 # if the relationship is size-dependent, get a coefficient for that, and return
 # along with the (row-vector) offsets for all size classes
-get_size_effect <- function (size_dependent, sizes) {
+get_size_effect <- function (size_dependent, prior, sizes) {
+
   coef <- 0
+
   if (size_dependent) {
-    coef <- normal(0, 10)
+    coef <- normal(prior$mean, prior$sd)
   }
+
   list(coef = coef, size_effect = coef * t(sizes))
 }
 
@@ -91,7 +154,7 @@ interpolate_survival <- function (adult_survival_matrix,
 }
 
 # build and return a greta model for the DSDM
-build_model <- function (occurrence) {
+build_model <- function (occurrence, informative_priors = FALSE) {
 
   # subset occurrence data to wheere we observe presence/absence, and subset to
   # a few observations (for now)
@@ -101,7 +164,7 @@ build_model <- function (occurrence) {
 
   # formulae for the *environmental components* of the vital rate regressions
   formulae <- list(
-    growth = ~ quad(prop_fertile) + quad(winter_smd) + quad(prop_acidic) + min_temp_july + quad(winter_smd),
+    growth = ~ quad(prop_fertile) + quad(winter_smd) + quad(prop_acidic) + min_temp_july + quad(summer_smd),
     flowering = ~ 1,
     seedheads = ~ min_temp_july + quad(prop_acidic),
     seeds = ~ 1,
@@ -110,8 +173,21 @@ build_model <- function (occurrence) {
     seedling_survival = ~ min_temp_july + mean_annual_precip
   )
 
+  beta_priors <- lapply(
+    names(formulae),
+    prior,
+    type = "environment",
+    informative = informative_priors
+  )
+
   # for each formula, get the vector of coefficients and environmental effects
-  env_effects_list <- lapply(formulae, get_env_effect, occ_train)
+  env_effects_list <- mapply(
+    get_env_effect,
+    formulae, beta_priors,
+    MoreArgs = list(data = occ_train),
+    SIMPLIFY = FALSE
+  )
+
   betas <- lapply(env_effects_list, `[[`, "beta")
   env_effects <- lapply(env_effects_list, `[[`, "env_effect")
 
@@ -134,7 +210,20 @@ build_model <- function (occurrence) {
     seedling_survival = TRUE
   )
 
-  size_effects_list <- lapply(size_dependent, get_size_effect, sizes)
+  size_priors <- lapply(
+    names(size_dependent),
+    prior,
+    type = "size",
+    informative = informative_priors
+  )
+
+  size_effects_list <- mapply(
+    get_size_effect,
+    size_dependent, size_priors,
+    MoreArgs = list(sizes = sizes),
+    SIMPLIFY = FALSE
+  )
+
   size_coefs <- lapply(size_effects_list, `[[`, "coef")
   size_effects <- lapply(size_effects_list, `[[`, "size_effect")
 
@@ -146,10 +235,12 @@ build_model <- function (occurrence) {
 
   # combine the size and environment effects (get the outer sum of the two) to
   # get matrices on the link scale
-  link_matrices <- mapply(kronecker,
-                          size_effects, env_effects,
-                          MoreArgs = list(FUN = "+"),
-                          SIMPLIFY = FALSE)
+  link_scale_matrices <- mapply(
+    kronecker,
+    size_effects, env_effects,
+    MoreArgs = list(FUN = "+"),
+    SIMPLIFY = FALSE
+  )
 
   # transform to parameters to the response scale to build kernel array
   link_functions <- list(
@@ -162,9 +253,11 @@ build_model <- function (occurrence) {
     seedling_survival = ilogit
   )
 
-  matrices <- mapply(apply_link,
-                     link_functions, link_matrices,
-                     SIMPLIFY = FALSE)
+  matrices <- mapply(
+    apply_link,
+    link_functions, link_scale_matrices,
+    SIMPLIFY = FALSE
+  )
 
   # get coefficients for variation in growth and offspring size
   growth_sd <- normal(0, 10, truncation = c(0, Inf))
@@ -196,8 +289,10 @@ build_model <- function (occurrence) {
   # need to reshape these as matrices ((n_sites * matrix_dim) x matrix_dim),
   # multiply by other kernel components, sweep-divide by density sums to do
   # integration, then reshape back again. phew! difficult bit will be reshaping
-  # so that we can sum along the right dimension (and working outr which side
+  # so that we can sum along the right dimension (and working out which side
   # that is!)
+
+
 
   # adapt this from Merow (Appendix C, p14);  P is growth_density
 
