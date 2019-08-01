@@ -356,25 +356,24 @@ build_model <- function (occurrence, informative_priors = FALSE) {
   # combine into a single kernel
   kernel_array <- P_array + F_array
 
-  # get the intrinsic growth rate for each location
-  iterations <- greta.dynamics::iterate_matrix(kernel_array)
+  # intrinsic growth rates across locations
+  stable_state <- greta.dynamics::iterate_matrix(kernel_array)
+  lambda <- stable_state$lambda
 
   # form the likelihood
-  log_lambda <- log(iterations$lambda)
-  log_rate <- log_lambda + intercept
-  p_present <- icloglog(log_rate)
-  distribution(occurrence$presence) <- binomial(p_present)
+  p_present <- 1 - exp(-lambda)
+  distribution(occ_train$presence) <- bernoulli(p_present)
 
   # build the model
-  m <- model(intercept, beta_growth, beta_fecundity, beta_survival)
+  m <- model(lambda)
 
   # return the model and greta arrays (used for plotting and prediction)
   list(
     model = m,
-    intercept = intercept,
-    beta_growth = beta_growth,
-    beta_fecundity = beta_fecundity,
-    beta_survival = beta_survival
+    environment_coefs = betas,
+    size_coefs = size_coefs,
+    growth_sd = growth_sd,
+    offspring_size_sd = offspring_size_sd
   )
 
 }

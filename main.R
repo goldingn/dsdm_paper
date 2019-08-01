@@ -48,7 +48,7 @@ source("R/modelling.R")
 
 fit_model <- drake_plan(
   occurrence = readRDS(file_in("data/clean/occurrence.RDS")),
-  model = build_model(occurrence),
+  model_list = build_model(occurrence),
   draws = run_mcmc(model_list),
   relationships_fig = plot_relationships(model_list, draws, occurrence),
   predictions = make_predictions(model_list, draws, occurrence)
