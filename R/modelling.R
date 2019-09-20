@@ -1,3 +1,23 @@
+op <- greta::.internals$nodes$constructors$op
+tf <- tensorflow::tf
+
+# normalise a matrix rowwise in exponential space. Ie. Given a matrix x, return a
+# matrix y where:
+# exp(y[i, ]) = exp(x[i, ]) / sum(exp(x[i, ]))
+# or:
+# y[i, ] <- log(exp(x[i, ]) / sum(exp(x[i, ])))
+# or:
+# y[i, ] <- x[i, ] -  log(sum(exp(x[i, ])))
+log_normalise <- function (x) {
+  op("log_normalise", x, tf_operation = "tf_log_normalise")
+}
+
+tf_log_normalise <- function (x) {
+  # skipping batch dimension, do log_sum_exp on rows, then broadcast subtract it
+  sums <- tf$reduce_logsumexp(x, axis = 2L, keepdims = TRUE)
+  x - sums
+}
+
 # load the parameter estimates from Merow et al. and format them as the
 # parameters of normal priors
 prior <- function (model = c("seedling_survival", "adult_survival", "growth",
@@ -73,7 +93,7 @@ get_env_effect <- function (formula, prior, data) {
 
   beta <- normal(prior$mean, prior$sd)
 
-  # # for intercept-only models, don't multiply by the intercept column, it's mode
+  # # for intercept-only models, don't multiply by the intercept column, it's more
   # # efficient (when combining the kernels) to return just the scalar
   # if (identical(data_names, "(Intercept)")) {
   #   env_effect <- beta
@@ -118,11 +138,17 @@ distribution_kernel <- function (mean_matrix, sd, sizes, bin_width) {
   # work with the log density for computational stability
   var <- sd ^ 2
   log_constant <- -0.5 * log(2 * pi) - log(sd)
-  # diff is created as a matrix with dimensions (n_sites * matrix_dim) x matrix_dim, so we
-  # reshape it (to n_sites x matrix_dim x matrix_dim)
   diff <- kronecker(sizes, mean_matrix, FUN = "-")
-  dim(diff) <- c(n_sites, matrix_dim, matrix_dim)
   log_density <- log(bin_width) + log_constant - (diff ^ 2) / (2 * var)
+
+  # normalise this in exponential-space (hope we get it the right way round!)
+  log_density <- log_normalise(log_density)
+
+  # diff was created as a matrix with dimensions (n_sites * matrix_dim) x
+  # matrix_dim, so we reshape it (to n_sites x matrix_dim x matrix_dim), then
+  # transpose all the matrices, to that columns sum to 1
+  dim(log_density) <- c(n_sites, matrix_dim, matrix_dim)
+  log_density <- aperm(log_density, c(1, 3, 2))
   exp(log_density)
 }
 
@@ -183,11 +209,11 @@ sweep_3 <- function(A, B, FUN = c('-', '+', '/', '*')) {
 # build and return a greta model for the DSDM
 build_model <- function (occurrence, informative_priors = FALSE) {
 
-  # subset occurrence data to wheere we observe presence/absence, and subset to
+  # subset occurrence data to where we observe presence/absence, and subset to
   # a few observations (for now)
   occurrence %>%
     filter(!is.na(presence)) %>%
-    sample_n(3) -> occ_train
+    sample_n(150) -> occ_train
 
   # formulae for the *environmental components* of the vital rate regressions
   formulae <- list(
@@ -323,24 +349,11 @@ build_model <- function (occurrence, informative_priors = FALSE) {
   # sweep the vector (matrix) components through the matrix (array) components
   # to build the kernel matrices (arrays)
 
-  # get normalisations for the columns in the growth kernel, so we can make them
-  # sum to 1 (to complete the integration)
-  growth_normalisation <- apply(growth_density, c(1, 3), "sum")
-
-  # Merow has:
-  # (Ss*P)/Ps = (matrices$survival * growth_density) / growth_normalisation
-  # the following (P * (Ss / Ps)) is the same but in fewer FLOPs.
-  # sweep_3 is a custom function to do an array-matrix sweep on the third
-  # dimension (columns of each matrix).
   P_array <- sweep_3(
     growth_density,
-    matrices$survival / growth_normalisation,
+    matrices$survival,
     FUN = "*"
   )
-
-  # get normalisations for the columns in the offspring size kernel, so we can
-  # make them sum to 1 (to complete the integration)
-  offspring_size_normalisation <- apply(offspring_size_density, c(1, 3), "sum")
 
   # build fecundity kernel
   # environment:
@@ -349,7 +362,7 @@ build_model <- function (occurrence, informative_priors = FALSE) {
 
   F_array <- sweep_3(
     offspring_size_density,
-    matrices$recruits / offspring_size_normalisation,
+    matrices$recruits,
     FUN = "*"
   )
 
@@ -360,13 +373,15 @@ build_model <- function (occurrence, informative_priors = FALSE) {
   stable_state <- greta.dynamics::iterate_matrix(kernel_array)
   lambda <- stable_state$lambda
 
+  # observation model parameter
+  likelihood_intercept <- normal(0, 10)
+
   # form the likelihood
-  p_present <- 1 - exp(-lambda)
+  p_present <- icloglog(likelihood_intercept + log(lambda))
   distribution(occ_train$presence) <- bernoulli(p_present)
 
   # build the model
   m <- model(lambda)
-
   # return the model and greta arrays (used for plotting and prediction)
   list(
     model = m,
@@ -380,7 +395,12 @@ build_model <- function (occurrence, informative_priors = FALSE) {
 
 # do MCMC on the model until converged
 run_mcmc <- function (model_list) {
+  # register numerical underflow as a numerical error
+  msg <- "incompatible with expected double"
+  greta_stash <- greta:::greta_stash
+  greta_stash$numerical_messages <- c(greta_stash$numerical_messages, msg)
 
+  draws <- mcmc(model_list$model, one_by_one = TRUE)
 }
 
 # use the model and MCMC parameter samples to visualise the fitted vital rate
