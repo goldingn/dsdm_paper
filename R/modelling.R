@@ -393,14 +393,9 @@ build_model <- function (occurrence, informative_priors = FALSE) {
 
 }
 
-# do MCMC on the model until converged
+# do MCMC on the model
 run_mcmc <- function (model_list) {
-  # register numerical underflow as a numerical error
-  msg <- "incompatible with expected double"
-  greta_stash <- greta:::greta_stash
-  greta_stash$numerical_messages <- c(greta_stash$numerical_messages, msg)
-
-  draws <- mcmc(model_list$model, one_by_one = TRUE)
+  draws <- mcmc(model_list$model)
 }
 
 # use the model and MCMC parameter samples to visualise the fitted vital rate
