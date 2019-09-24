@@ -40,15 +40,62 @@ knitr::opts_chunk$set(fig.path = 'figs/',
 # Introduction
 
 
+Advancing distribution modelling
 
+Distribution models underpin decision making in conservation1 and public health.
+The accuracy and interpretability of distribution modelling methods therefore has real-world impact.
+Correlative models (SDM and geostatistics) are the most widely used methods as they describe and interpolate distributions well with minimal prior knowledge of the system5.
+However their arbitrary, flexible functional forms make them poor at predicting to novel conditions9.
+Correlative approaches do not explicitly model the processes (demography, dispersal and interactions) the drive distributions, so are poor at incorporating prior ecological knowledge and cannot predict how distributions will change if these processes are altered, such as by human interventions11.
+Advancing distribution modelling to incorporate these processes will improve decision making in conservation and public health research12.
 
+Existing methods for mapping demography
+
+Spatial simulation models such as metapopulation viability analyses and spatial infectious disease simulations are used in conservation and epidemiology to anticipate how unstable population dynamics will evolve over a landscape.
+These approaches do not map spatial variation in demographic rates so cannot be used to predict distributions. Dynamic range models (DRMs) extend correlative SDMs by explicitly modelling dispersal processes12.
+DRMs model the intrinsic population growth rate rather than demographic processes so suffer the same extrapolation issues as correlative SDMs and cannot be queried to predict the effects of changing demography.
+Matrix population models and integral projection models (IPMs) are demographic models of single populations that construct and analyse a Leslie matrix representing key demographic processes13.
+Spatial IPMs extend this idea to map distributions by modelling demographic rates as a function of covariates, then analysing Leslie matrices under different conditions to map emergent demographic quantities (such as the intrinsic growth rate) to characterize the species’ distribution14.
 
 
 # Fitting Demographic Models to Distribution Data
 
+I have developed demographic species distribution models (DSDMs) to further extend this approach, treating the spatial IPM as a single model and fitting it to observed distribution data. DSDMs therefore unite two fields of quantitative ecology: statistical distribution modelling and demographic modelling (Fig. 1). I have already developed a basic DSDM and the software required to perform efficient statistical inference on it (Box 1, Fig. 2). This DECRA will extend this basic DSDM to incorporate three key ecological processes, enabling me to build DSDMs to solve three applied problems in public health and conservation (Fig. 3).
 
+
+Parameter identifiability
+
+Like many ecologically-realistic models, DSDM parameters are in general not uniquely identified, so estimates may be correlated or even multimodal.
+This non-identifiability is ecologically informative as it arises from ignorance of the species’ ecology and highlights areas where more research is needed.
+This ignorance can be captured in prediction uncertainty, more realistically representing how well we can predict distributions15.
+However, poor identification complicates statistical inference as maximum likelihood methods will be inaccurate and Markov chain Monte Carlo samplers may not converge16.
+This proposal uses two new tools to resolve this issue and fit DSDMs to large datasets: Hamiltonian Monte Carlo & high performance automatic differentiation.
 
 # Computation
+
+Hamiltonian Monte Carlo (HMC) is a Markov chain Monte Carlo method that can sample effectively from highly correlated and multi-modal parameter distributions16, but requires gradient calculations.
+Automatic differentiation (AD, also known as back-propagation) is a computational technique to derive these gradients. Whilst HMC & AD modelling software is available20, it is not optimised for the large-scale linear algebra required for DSDMs.
+High-performance AD software enables complex machine learning models (e.g. deep neural networks) to be fit to very large datasets; facilitating recent dramatic advances in artificial intelligence.
+Google’s recently released open source, high performance AD software TensorFlow is optimised for massive linear algebra21.
+I have combined HMC with TensorFlow in an R package greta19 for flexible specification of and sampling from statistical models in R.
+Using greta, ecologists can easily build and fit DSDMs on desktop computers or high-performance compute clusters.
+
+
+Advancing DSDMs
+
+Basic DSDMs, like the model in Example 1, do not require detailed knowledge of a species population dynamics or the relationship between specific demographic rates and the environment in order to make predictions that are comparable to correlative SDMs.
+Where such information is available (e.g. from studies or expert opinion) it can be incorporated to improve DSDM predictions either via informative priors or by directly incorporating predictions from other models.
+The DSDMs I propose are based on Leslie matrices, which are well studied in ecology and have been used to study a wide range of plant and animal species with very different life histories23.
+Like other Leslie matrix approaches, the basic DSDMs I have already developed can also be extended to explicitly model three key ecological processes that are poorly captured by existing distribution models:
+
+*Density dependence* can be represented in DSDMs by modelling demographic rates as a function of the current population state23 (the abundances of each life stage) as well as covariates.
+For example, the current density of individuals could determine fecundity for the next iteration of the dynamics. The matrix iterations will then converge to a stable state; the population carrying capacity or the expected abundance.
+
+*Dispersal* can be incorporated in DSDMs by representing an entire metapopulation in a single sparse, block-structured Leslie matrix, with dispersal represented by transition probabilities between states in different patches24.
+
+*Biotic interactions* between species can be incorporated in a DSDM by representing the interacting dynamics of multiple species in a single Leslie matrix, with inter-species density dependence25.
+By modelling demographic rates of one species as dependent on the abundance of another species, DSDMs can represent the effects of competition, facilitation, predation and parasitism.
+
 
 
 # Example 1. A DSDM for the Carolina Chickadee
@@ -81,8 +128,8 @@ Carolina Chickadee data were downloaded from the North American Breeding Bird Su
 
 ### Figures
 
-```{r flow_diagram, echo = FALSE, fig.cap = "Figure 1. Title"}
-# knitr::include_graphics("figs/diagrams.png")
+```{r flow_diagram, echo = FALSE, fig.cap = "Demographic species distribution models in the context of other models of distribution and demography. A) Correlative species distribution models (SDMs) use a correlative mathematical relationship - such as a logit-linear model - to predict a species' distribution from spatial covariates. The predicted distribution (for a given set of parameter values) is compared to observed distribution data using an observation model - such as a Bernoulli distribution, for presence-absence data. Statistical inference is performed to infer the correlative model parameters from the distribution data. B) Matrix population models (MPMs) and integral projections models (IPMs) combine either direct estimates, or correlative models, of vital rates like survival and fecundity to predict demographic quantities such as the population growth rate. Spatial IPMs apply these models to covariate values at each pixel in the landscape, and therefore map the distributions of vital rates and species. Unlike correlative SDMs, the parameters of MPMs, IPMs, and spatial IPMs are inferred from data on population dynamics at specific locations, rather than distribution data. Demographic SDMs (proposed here) combine correlative SDMs and spatial IPMs; replacing the arbitrary correlative model in a correlative SDM with an MPM or IPM, and inferring model parameters by fitting the whole model statistically to observed distributions.", out.width = "\\textwidth"}
+knitr::include_graphics("../figures/schematic.png")
 ```
 
 ### References
