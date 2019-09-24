@@ -1,0 +1,88 @@
+---
+title: "Demographic Species Distribution Models"
+author:
+  - Nick Golding
+  - School of BioSciences, University of Melbourne, Parkville VIC, Australia
+bibliography: dsdm.bib
+csl: mee.csl
+output:
+  pdf_document:
+  word_document:
+    fig_caption: true
+    highlight: null
+---
+
+Word Count: `r wordcountaddin::word_count()`
+
+
+# Abstract
+
+1. Quantifying the distributions and abundances of species is a problem central to ecology. Correlative Species Distribution Models (SDMs) are are widely used, and whilst they perform well at predicting current distributions, their lack of ecological mechanism means they have questionable ability to predict how distributions will change in response to environmental change, habitat loss, or human interventions.
+
+2. I propose Demographic Species Distribution Models (DSDMs): matrix population models that are statistically fitted to species distribution data, to form a mechanistically-based statistical model for species distributions. This approach differs from existing mechanistic SDMs in that it makes use of commonly available species distribution data (abundance, presence-only, or presence-absence), explicitly models how vital rates such as fecundity and survival vary over space, and enables - but does not require - the incorporation of prior knowledge of a species' ecology. 
+
+3. Example applications mapping the Carolina Chickadee in North Ameerica, and a Protea in southern Africa indicate that DSDMs have similar predictive performance to SDMs, and produce plausible spatial estimates of vital rates. Even when DSDMs are provided little information on the ecology of the target species, predictions of distributions are well-identified, and increased uncertainty about population dynamics is reflected in more uncertain estimates of vital rates.
+
+4. DSDMs can be extended to consider features of population dynamics such as dispersal, density dependence, and biotic interactions. Being specifically designed for efficient statistical inference, they are a promising replacement for correlative SDMs where study aims require the incorporating of more ecological mechanism.
+
+```{r knitrOpts, echo = FALSE, cache = FALSE, eval = TRUE}
+# set up knitr options
+knitr::opts_chunk$set(fig.path = 'figs/',
+               message = FALSE,
+               warning = FALSE,
+               fig.align = 'center',
+               dev = c('png'),
+               cache = TRUE)
+```
+
+
+
+# Introduction
+
+
+
+
+
+
+# Fitting Demographic Models to Distribution Data
+
+
+
+# Computation
+
+
+# Example 1. A DSDM for the Carolina Chickadee
+
+
+
+
+
+# Example 2. A DSDM for *Protea repens*
+
+
+
+
+
+### Supporting information
+
+The code required to reproduce this manuscript is archived at [<code to be archived on acceptance>](), and hosted at [<github link>]().
+
+### Author's contributions
+
+NG developed the model, software and example analyses and wrote the manuscript.
+
+### Acknowledgements
+
+This work was funded by a McKenzie fellowship from the University of Melbourne and an ARC DECRA fellowship (DE180100635).
+
+### Data accessibility
+
+Carolina Chickadee data were downloaded from the North American Breeding Bird Survey FTP site. Protea data are made available as an appendix to @merowUsingIntegralProjection2014, they can be downloaded by searching for artefact ECOG-00839 at [http://www.ecography.org/readers/appendix]()
+
+### Figures
+
+```{r flow_diagram, echo = FALSE, fig.cap = "Figure 1. Title"}
+# knitr::include_graphics("figs/diagrams.png")
+```
+
+### References

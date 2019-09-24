@@ -1,6 +1,9 @@
 .Rproj.user
 .drake
+.drake_history
 *.pdf
+*.docx
 *.RData
 *.RDS
 *.png
+manuscript/ms_cache/
