@@ -65,8 +65,8 @@ Because they do not model vital rates directly DRMs, like correlative SDMs, are 
 
 <MPMs & IPMs do this at a single location - widely used in ecology, and even whole databases available>
 
-By contrast, matrix population models and integral projection models (IPMs) are demographic models of single populations that construct and analyse a Leslie matrix representing key demographic processes13.
-Spatial IPMs extend this idea to map distributions by modelling demographic rates as a function of covariates, then analysing Leslie matrices under different conditions to map emergent demographic quantities (such as the intrinsic growth rate) to characterize the species’ distribution14.
+By contrast, matrix population models and integral projection models (IPMs) are demographic models of single populations that construct and analyse a transition matrix representing key demographic processes [@merowAdvancingPopulationEcology2014].
+Spatial IPMs extend this idea to map distributions by modelling demographic rates as a function of covariates, then analysing transition matrices under different conditions to map emergent demographic quantities (such as the intrinsic growth rate) to characterize the species’ distribution [@merowUsingIntegralProjection2014].
 
 <SIPMs (DDMs in Merow - note on nomenclature) apply these to large spatial scales. Whilst they rely on vast amnounts field data (so are not applicable in most SDM situations), they provide a link between demography and distribution, so we could perform statistical inference on them using distribution data. This is what we call a DSDM - the subject of this manuscript.
 
@@ -97,9 +97,9 @@ A two-stage matrix population model for the species has been developed for the U
 I constructed the DSDM as a single statistical model, using these national average fecundity and adult survival estimates as a prior distribution and modelling environmental variation in these rates via log- and logit-linear relationships with six environmental variables: cover of three forest types used for breeding habitat (fecundity), minimum temperature as a thermal limit (survival) and annual precipitation and mean temperature as proxies for insect abundance (fecundity and survival).
 Juvenile and adult survival differed by a constant value on the logit scale [@ryuDevelopingPopulationModels2016].
 
-For each location, these rates were used to generate a 2x2 Leslie matrix and iterated to estimate the intrinsic growth rate $\lambda$.
+For each location, these rates were used to generate a 2x2 transition matrix (a Lefkovitch matrix) and iterated to estimate the intrinsic growth rate $\lambda$.
 As in a dynamic range model, species abundance was assumed to be proportional to $\lambda$ (this simplistic assumption will be improved upon in the proposed project) and probability of presence at each location derived via the complementary log-log link, with a spatially-constant detection rate parameter.
-The model specification was completed with a Bernoulli likelihood and non-informative priors, and fitted to 500 presence-absence records from the Breeding Bird Survey of North America in 2015 [@todo].
+The model specification was completed with a Bernoulli likelihood and non-informative priors, and fitted to 500 presence-absence records from the North American Breeding Bird Survey in 2015 [@sauerNorthAmericanBreeding2011].
 
 Inference was by Hamiltonian Monte Carlo using the R package greta and its extension package greta.dynamics for modelling dynamical systems. Four chains were run for 1000 iterations each (after 1000 discarded iterations during which the sampler was burnt-in and tuned), which was sufficent to ensure convergence ($\hat{R}\le1.01$), and yield at least X effective samples, for all model parameters. This took Y seconds on a laptop computer.
 
@@ -117,21 +117,21 @@ The species’ range limits (in this case due to the fundamental niche) can be m
 
 Basic DSDMs, like the model in Example 1, do not require detailed knowledge of a species population dynamics or the relationship between specific demographic rates and the environment in order to make predictions that are comparable to correlative SDMs.
 Where such information is available (e.g. from studies or expert opinion) it can be incorporated to improve DSDM predictions either via informative priors or by directly incorporating predictions from other models.
-The DSDMs I propose are based on Leslie matrices, which are well studied in ecology and have been used to study a wide range of plant and animal species with very different life histories23.
-Like other Leslie matrix approaches, the basic DSDMs I have already developed can also be extended to explicitly model three key ecological processes that are poorly captured by existing distribution models: density dependence, dispersal, and biotic interactions.
+The DSDMs I propose are based on transition matrices (including the matrices used in both MPMs and IPMs), which are well studied in ecology and have been used to study a wide range of plant and animal species with very different life histories [@ellnerIntegralProjectionModels].
+Like other transition matrix approaches, the basic DSDMs I have already developed can also be extended to explicitly model three key ecological processes that are poorly captured by existing distribution models: density dependence, dispersal, and biotic interactions.
 
 ## Density dependence
 
-Density dependence can be represented in DSDMs by modelling demographic rates as a function of the current population state23 (the abundances of each life stage) as well as covariates.
+Density dependence can be represented in DSDMs by modelling demographic rates as a function of the current population state [@ellnerIntegralProjectionModels] (the abundances of each life stage) as well as covariates.
 For example, the current density of individuals could determine fecundity for the next iteration of the dynamics. The matrix iterations will then converge to a stable state; the population carrying capacity or the expected abundance.
 
 ## Dispersal
 
-Dispersal can be incorporated in DSDMs by representing an entire metapopulation in a single sparse, block-structured Leslie matrix, with dispersal represented by transition probabilities between states in different patches24.
+Dispersal can be incorporated in DSDMs by representing an entire metapopulation in a single sparse, block-structured transition matrix, with dispersal represented by transition probabilities between states in different patches [@neubertDEMOGRAPHYDISPERSALCALCULATION2000].
 
 ## Biotic interactions 
 
-Biotic interactionsbetween species can be incorporated in a DSDM by representing the interacting dynamics of multiple species in a single Leslie matrix, with inter-species density dependence25.
+Biotic interactionsbetween species can be incorporated in a DSDM by representing the interacting dynamics of multiple species in a single transition matrix, with inter-species density dependence [@fujiwaraCoexistenceCompetingStagestructured2011].
 By modelling demographic rates of one species as dependent on the abundance of another species, DSDMs can represent the effects of competition, facilitation, predation and parasitism.
 
 
@@ -148,23 +148,23 @@ Whilst the model presented in Example 1 makes predictions of spatial variation i
 
 Like many ecologically-realistic models, DSDM parameters are in general not uniquely identified, so estimates may be correlated or even multimodal.
 This non-identifiability is ecologically informative as it arises from ignorance of the species’ ecology and highlights areas where more research is needed.
-This ignorance can be captured in prediction uncertainty, more realistically representing how well we can predict distributions15.
+This ignorance can be captured in prediction uncertainty, more realistically representing how well we can predict distributions [@bealeIncorporatingUncertaintyPredictive2012].
 
 Example 1 indicates that identifiability issues do not affect predictions of the probability of presence - even if the data and priors do not provide sufficient information to disentangle vital rates.
 This example also suggests that a minimal amount of information is required to make the vital rates identifiable.
 These issues of identifiability warrant more detailed investigation, and healthy scepticism on the part of users.
 However since identifiability will depend on the nature of the data, model, and prior information, a detailed assessment of model identifiability is beyond the scope of this manuscript.
 
-However, poor identification complicates statistical inference as maximum likelihood methods will be inaccurate and Markov chain Monte Carlo samplers may not converge16.
+However, poor identification complicates statistical inference as maximum likelihood methods will be inaccurate and Markov chain Monte Carlo samplers may not converge [@monnahanFasterEstimationBayesian2017].
 This proposal uses two new tools to resolve this issue and fit DSDMs to large datasets: Hamiltonian Monte Carlo & high performance automatic differentiation.
 
 ##  Computation
 
-Hamiltonian Monte Carlo (HMC) is a Markov chain Monte Carlo method that can sample effectively from highly correlated and multi-modal parameter distributions16, but requires gradient calculations.
-Automatic differentiation (AD, also known as back-propagation) is a computational technique to derive these gradients. Whilst HMC & AD modelling software is available20, it is not optimised for the large-scale linear algebra required for DSDMs.
+Hamiltonian Monte Carlo (HMC) is a Markov chain Monte Carlo method that can sample effectively from highly correlated and multi-modal parameter distributions [@monnahanFasterEstimationBayesian2017], but requires gradient calculations.
+Automatic differentiation (AD, also known as back-propagation) is a computational technique to derive these gradients. Whilst HMC & AD modelling software is available [@carpenterStanProbabilisticProgramming2017], it is not optimised for the large-scale linear algebra required for DSDMs.
 High-performance AD software enables complex machine learning models (e.g. deep neural networks) to be fit to very large datasets; facilitating recent dramatic advances in artificial intelligence.
-Google’s recently released open source, high performance AD software TensorFlow is optimised for massive linear algebra21.
-I have combined HMC with TensorFlow in an R package greta19 for flexible specification of and sampling from statistical models in R.
+Google’s recently released open source, high performance AD software TensorFlow is optimised for massive linear algebra [@abadiTensorFlowLargeScaleMachine2016].
+I have combined HMC with TensorFlow in an R package greta [@goldingGretaSimpleScalable2019] for flexible specification of and sampling from statistical models in R.
 Using greta, ecologists can easily build and fit DSDMs on desktop computers or high-performance compute clusters.
 
 
