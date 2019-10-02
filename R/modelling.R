@@ -20,7 +20,7 @@ tf_log_normalise <- function (x) {
 
 # load the parameter estimates from Merow et al. and format them as the
 # parameters of normal priors
-prior <- function (model = c("seedling_survival", "adult_survival", "growth",
+protea_prior <- function (model = c("seedling_survival", "adult_survival", "growth",
                              "flowering", "seedheads", "seeds", "germination", "offspring_size"),
                    type = c("environment", "size"),
                    informative = TRUE) {
@@ -194,7 +194,7 @@ interpolate_survival <- function (adult_survival_matrix,
 # dimensions as A . Note that this is only necessary because greta's sweep
 # doesn't yet handle arrays (with more than 2 dimensions), otherwise we could
 # just do: sweep(A, B, MARGIN = c(1, 3), FUN = FUN)
-sweep_3 <- function(A, B, FUN = c('-', '+', '/', '*')) {
+sweep_3 <- function(A, B, FUN = c("-", "+", "/", "*")) {
   n <- dim(A)[1]
   m <- dim(A)[2]
   Al <- aperm(A, c(2, 3, 1))
@@ -207,7 +207,7 @@ sweep_3 <- function(A, B, FUN = c('-', '+', '/', '*')) {
 }
 
 # build and return a greta model for the DSDM
-build_model <- function (occurrence, informative_priors = FALSE) {
+build_protea_model <- function (occurrence, informative_priors = FALSE) {
 
   # subset occurrence data to where we observe presence/absence, and subset to
   # a few observations (for now)
@@ -229,7 +229,7 @@ build_model <- function (occurrence, informative_priors = FALSE) {
 
   beta_priors <- lapply(
     names(formulae),
-    prior,
+    protea_prior,
     type = "environment",
     informative = informative_priors
   )
@@ -400,13 +400,13 @@ run_mcmc <- function (model_list) {
 
 # use the model and MCMC parameter samples to visualise the fitted vital rate
 # relationships (using calculate and relevant design matrices)
-plot_relationships <- function(draws, model_list, occurrence) {
+plot_protea_relationships <- function(draws, model_list, occurrence) {
 
 }
 
 # use the model and MCMC parameter samples to make posterior predictions of
 # the probability of presence in new places (using calculate and relevant design matrices)
-make_predictions <- function(draws, model_list, occurrence) {
+make_protea_predictions <- function(draws, model_list, occurrence) {
 
 }
 

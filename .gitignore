@@ -5,5 +5,9 @@
 *.docx
 *.RData
 *.RDS
+*.csv
 *.png
+*.grd
+*.gri
+wc10
 manuscript/ms_cache/
