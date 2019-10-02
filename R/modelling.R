@@ -12,18 +12,9 @@ map_variable <- function (greta_array, draws, raster_template) {
   map
 }
 
-# scale covariates by named vectors of means and standard deviations
-scale_covs <- function (covs, means, sds) {
-  cols_scale <- match(names(means), colnames(covs))
-  covs_sub <- covs[, cols_scale]
-  covs_sub <- sweep(covs_sub, 2, means, "-")
-  covs_sub <- sweep(covs_sub, 2, sds, "/")
-  covs[, cols_scale] <- covs_sub
-  covs
-}
-
 surv_covs <- c("bio1", "bio12", "bio6")
 fec_covs <- c("pcMix", "pcDec", "pcCon", "bio1", "bio12")
+all_covs <- unique(c(surv_covs, fec_covs))
 
 # calculate survival, given covariates
 get_survival <- function (covs, params) {
@@ -61,71 +52,8 @@ get_prob <- function (lambdas, params) {
   icloglog(params$likelihood_intercept + log(lambdas))
 }
 
-
-build_bbs_model <- function (occ, covs) {
-
-  vals <- extract(covs, occ[, c('Longitude', 'Latitude')])
-  occ <- cbind(occ, vals)
-
-  # subset, remove a text column, and convert to a matrix
-  dat <- occ[sample(seq_len(nrow(occ)), 500),-1]
-  dat <- as.matrix(dat)
-
-  all_covs <- c(surv_covs, fec_covs)
-
-  # data size
-  ncov_fecundity <- length(fec_covs)
-  ncov_survival <- length(surv_covs)
-
-  # get means and sds for scaling/rescaling
-  dat_means <- colMeans(dat[, all_covs])
-  dat_sds <- apply(dat[, all_covs], 2, sd)
-
-  # centre & scale covs to make priors meaningful
-  dat <- scale_covs(dat, dat_means, dat_sds)
-
-  # parameters
-  params <- list(
-    # sum of regression priors should have variance of 1, as a form of shrinkage
-    beta_fecundity = normal(0, 1 / ncov_fecundity, dim = ncov_fecundity),
-    beta_survival = normal(0, 1 / ncov_survival, dim = ncov_survival),
-    # no prior on the likelihood intercept
-    likelihood_intercept = variable(),
-    # uncertainty in the population means for survival and fecundity
-    default_logit_survival = normal(qlogis(0.710), sqrt(0.03806)),
-    default_log_fecundity = normal(log(0.58), 0.25)
-  )
-
-  # get all the components
-  survival <- get_survival(dat, params)
-  fecundity <- get_fecundity(dat, params)
-  lambdas <- get_lambda(survival, fecundity)
-  prob <- get_prob(lambdas, params)
-
-  # likelihood for presence-absence data
-  presence <- dat[, "PA"]
-  distribution(presence) <- bernoulli(prob)
-
-  # fit the model
-  m <- model(params$beta_fecundity,
-             params$beta_survival,
-             params$likelihood_intercept)
-
-  list(
-    model = m,
-    data = dat,
-    params = params,
-    cov_scaling = list(means = dat_means,
-                       sds = dat_sds)
-  )
-
-}
-
-make_bbs_predictions <- function (model_list, draws_list, covs) {
-
-  params <- model_list$params
-  scaling <- model_list$cov_scaling
-  draws <- draws_list$draws
+# randomly split data into training and test datasets, and compute other useful data things
+split_data <- function (occ, covs) {
 
   # covariates for all pixels
   raster_template <- list(
@@ -133,8 +61,84 @@ make_bbs_predictions <- function (model_list, draws_list, covs) {
     idx = which(!is.na(getValues(covs[[7]])))
   )
 
+  # scale covs to have zero mean (so intercept can be defined as a spatial average) and variance 1
+  covs <- scale(covs)
+
+  coords <- occ[, c("Longitude", "Latitude")]
+  vals <- extract(covs, coords)
+  occ <- occ[, -(1:2)]
+  all <- cbind(occ, vals)
+  all <- na.omit(all)
+
+
+  # subset, remove a text column, and convert to a matrix
+  train_idx <- sample.int(nrow(all), 500)
+
+
+  list(
+    train = all[train_idx, ],
+    test = all[-train_idx, ],
+    all = all,
+    covs = covs,
+    raster_template = raster_template
+  )
+
+}
+
+build_bbs_model <- function (data_list) {
+
+  # data size
+  ncov_fecundity <- length(fec_covs)
+  ncov_survival <- length(surv_covs)
+
+  # parameters
+  params <- list(
+    beta_fecundity = normal(0, 1, dim = ncov_fecundity),
+    beta_survival = normal(0, 1, dim = ncov_survival),
+    # no prior on the likelihood intercept
+    alpha = variable(lower = 0),
+    # uncertainty in the population means for survival and fecundity
+    default_survival = normal(0.710, sqrt(0.03806), truncation = c(0, 1)),
+    default_fecundity = normal(0.58, 0.25, truncation = c(0, Inf))
+  )
+  params$default_logit_survival <- log(params$default_survival / (1 - params$default_survival))
+  params$default_log_fecundity <- log(params$default_fecundity)
+  params$likelihood_intercept <- log(params$alpha)
+
+  # get all the components
+  survival <- get_survival(data_list$train, params)
+  fecundity <- get_fecundity(data_list$train, params)
+  lambdas <- get_lambda(survival, fecundity)
+  prob <- get_prob(lambdas, params)
+
+  # likelihood for presence-absence data
+  presence <- data_list$train$PA
+  distribution(presence) <- bernoulli(prob)
+
+  # fit the model
+  m <- model(
+    params$beta_fecundity,
+    params$beta_survival,
+    params$likelihood_intercept,
+    params$default_log_fecundity,
+    params$default_logit_survival
+  )
+
+  list(
+    model = m,
+    params = params
+  )
+
+}
+
+make_bbs_predictions <- function (model_list, draws_list, data_list) {
+
+  params <- model_list$params
+  draws <- draws_list$draws
+  covs <- data_list$covs
+  raster_template <- data_list$raster_template
+
   covs_predict <- extract(covs, raster_template$idx)
-  covs_predict <- scale_covs(covs_predict, scaling$means, scaling$sds)
 
   # get prediction greta arrays
   survival_predict <- get_survival(covs_predict, params)
@@ -148,13 +152,13 @@ make_bbs_predictions <- function (model_list, draws_list, covs) {
   fec_map <- map_variable(fecundity_predict, draws, raster_template)
   surv_map <- map_variable(survival_predict$adult, draws, raster_template)
 
-  # decrease survival by 50% across N America and get range
+  # decrease survival by 50% across N America
   survival_predict_low <- lapply(survival_predict, "*", 0.5)
   lambdas_low_surv <- get_lambda(survival_predict_low, fecundity_predict)
   lambda_low_surv_map <- map_variable(lambdas_low_surv, draws, raster_template)
 
-  # decrease fecundity by 50% across N America and get range
-  lambdas_low_fec <- get_lambda(survival_predict, fecundity_predict)
+  # decrease fecundity by 50% across N Americ
+  lambdas_low_fec <- get_lambda(survival_predict, fecundity_predict * 0.5)
   lambda_low_fec_map <- map_variable(lambdas_low_fec, draws, raster_template)
 
   list(
@@ -319,6 +323,52 @@ plot_bbs_maps <- function (predictions, model_list) {
   dev.off()
 
 }
+
+loglik <- function (pred, pa) {
+  sum(dbinom(pa, 1, pred, log = TRUE))
+}
+
+auc <- function(pred, pa) {
+  as.numeric(pROC::auc(pa, pred))
+}
+
+# compare predictive ability of DSDM and GLM, and correlation between predictions.
+compare_bbs_predictions <- function (predictions, data_list) {
+
+  prob_raster <- predictions$prob_present
+
+  train <- data_list$train
+  train_pa <- train$PA
+  train_covs <- train[, all_covs]
+
+  test <- data_list$test
+  test_coords <- test[, c("Longitude", "Latitude")]
+  test_pa <- test$PA
+  test_covs <- test[, all_covs]
+
+  # extract predictions from DSDM
+  dsdm_pred <- raster::extract(prob_raster, test_coords)
+
+  # make predictions from GLM
+  glm <- glm(train_pa ~ .,
+             data = as.data.frame(train_covs),
+             family = stats::binomial)
+  glm_pred <- predict(glm,
+                      newdata = as.data.frame(test_covs),
+                      type = "response")
+
+  list(
+    glm_dsdm_correl = cor(glm_pred, dsdm_pred),
+    glm_pa_correl = cor(glm_pred, test_pa),
+    dsdm_pa_correl = cor(dsdm_pred, test_pa),
+    glm_ll = loglik(glm_pred, test_pa),
+    dsdm_ll = loglik(dsdm_pred, test_pa),
+    glm_auc = auc(glm_pred, test_pa),
+    dsdm_auc = auc(dsdm_pred, test_pa)
+  )
+
+}
+
 
 op <- greta::.internals$nodes$constructors$op
 tf <- tensorflow::tf
@@ -742,3 +792,19 @@ make_protea_predictions <- function(draws_list, model_list, occurrence) {
 }
 
 
+# check
+check_draws <- function (draws_list, name) {
+
+  draws <- draws_list$draws
+
+  pdf(file.path("figures", paste0(name, "_draws.pdf")))
+  plot(draws)
+  dev.off()
+
+  list(
+    r_hat = coda:::gelman.diag(draws),
+    n_eff = coda:::effectiveSize(draws),
+    summary = summary(draws)
+  )
+
+}

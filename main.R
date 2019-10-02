@@ -15,6 +15,7 @@ library(raster)
 library(RColorBrewer)
 library(dplyr)
 library(maxlike)
+library(pROC)
 
 # modelling
 library(greta.dynamics)
@@ -50,11 +51,14 @@ source("R/modelling.R")
 fit_bbs_model <- drake_plan(
   bbs_occurrence = readRDS(file_in("data/clean/bbs_occ.RDS")),
   bbs_covs = brick(file_in("data/clean/bbs_covs.grd")),
-  model_list = build_bbs_model(bbs_occurrence, bbs_covs),
+  data_list = split_data(bbs_occurrence, bbs_covs),
+  model_list = build_bbs_model(data_list),
   draws_list = run_mcmc(model_list),
-  predictions = make_bbs_predictions(model_list, draws_list, bbs_covs),
+  draws_summary = check_draws(draws_list, "bbs"),
+  predictions = make_bbs_predictions(model_list, draws_list, data_list),
   plots = plot_bbs_maps(predictions, model_list),
-  stats = compare_bbs_predictions(predictions, model_list)
+  stats = compare_bbs_predictions(predictions, data_list),
+  save = saveRDS(stats, file_out("data/clean/bbs_stats.RDS"))
 )
 
 make(fit_bbs_model)
@@ -63,6 +67,7 @@ fit_protea_model <- drake_plan(
   protea_occurrence = readRDS(file_in("data/clean/protea_occurrence.RDS")),
   model_list = build_protea_model(protea_occurrence),
   draws_list = run_mcmc(model_list),
+  draws_summary = check_draws(draws_list, "protea"),
   relationships_fig = plot_protea_relationships(model_list, draws_list, protea_occurrence),
   predictions = make_protea_predictions(model_list, draws_list, protea_occurrence)
 )

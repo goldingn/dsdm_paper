@@ -126,8 +126,8 @@ logit(S_{Ai}) &= logit(\widetilde{S}_A) + \mathbf{X}_{Si}\beta_S \\ \nonumber
 logit(S_{Ji}) &= logit(S_{Ai}) - 0.94 \\ \nonumber
 \widetilde{F} &\sim N^+(-0.545, 0.25^2) \\ \nonumber
 \widetilde{S}_A &\sim N^{(0,1)}(0.895, 0.195^2) \\ \nonumber
-\beta_{Si} &\sim N(0, 10) \\ \nonumber
-\beta_{Fi} &\sim N(0, 10)
+\beta_{Si} &\sim N(0, 1) \\ \nonumber
+\beta_{Fi} &\sim N(0, 1)
 \end{align}
 
 where $\mathbf{X}_{F}$ and $\mathbf{X}_{S}$ are matrices of covariates for the fecundity and survival submodels respectively, and $\beta_F$ and $\beta_S$ are the corresponding vectors of regression coefficients, to which we assign minimally-informative priors. These design matrices do not include dummy intercept columns, but instead covariates are centred so that their average value is zero over the contiguous USA, and the intercept is modelled via a separate parameter representing the spatial average of these rates.
