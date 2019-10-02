@@ -1,3 +1,325 @@
+# modelling functions for boht the BBS and protea analyses
+
+# given a vector greta array, where each element corresponds to a cell in the
+# raster, an mcmc.list object of posterior samples, return a raster giving the
+# posterior mean of the greta array in each cells
+map_variable <- function (greta_array, draws, raster_template) {
+  vals <- calculate(greta_array, draws)
+  vals_mat <- as.matrix(vals)
+  mean <- colMeans(vals_mat)
+  map <- raster_template$raster
+  map[raster_template$idx] <- mean
+  map
+}
+
+# scale covariates by named vectors of means and standard deviations
+scale_covs <- function (covs, means, sds) {
+  cols_scale <- match(names(means), colnames(covs))
+  covs_sub <- covs[, cols_scale]
+  covs_sub <- sweep(covs_sub, 2, means, "-")
+  covs_sub <- sweep(covs_sub, 2, sds, "/")
+  covs[, cols_scale] <- covs_sub
+  covs
+}
+
+surv_covs <- c("bio1", "bio12", "bio6")
+fec_covs <- c("pcMix", "pcDec", "pcCon", "bio1", "bio12")
+
+# calculate survival, given covariates
+get_survival <- function (covs, params) {
+  x_survival <- covs[, surv_covs]
+  survival_logit <- x_survival %*% params$beta_survival + params$default_logit_survival
+  survival_adult <- ilogit(survival_logit)
+  juvenile_offset <- qlogis(0.489) - qlogis(0.710)
+  survival_juvenile <- ilogit(survival_logit + juvenile_offset)
+  list(adult = survival_adult,
+       juvenile = survival_juvenile)
+}
+
+get_fecundity <- function (covs, params) {
+  x_fecundity <- covs[, fec_covs]
+  fecundity_log <- x_fecundity %*% params$beta_fecundity + params$default_log_fecundity
+  exp(fecundity_log)
+}
+
+get_lambda <- function(survival, fecundity) {
+
+  # build n x m x m 3D array containing Leslie matrices for different locations
+  top_row <- cbind(fecundity * survival$juvenile,
+                   fecundity * survival$adult)
+  bottom_row <- cbind(survival$juvenile,
+                      survival$adult)
+  matrices <- abind(top_row, bottom_row, along = 3)
+
+  # loop across observations, iterating matrices (only 10 times, for speed) to get implied intrinsic growth
+  iterated <- greta.dynamics::iterate_matrix(matrices, niter = 10)
+  iterated$lambda
+
+}
+
+get_prob <- function (lambdas, params) {
+  icloglog(params$likelihood_intercept + log(lambdas))
+}
+
+
+build_bbs_model <- function (occ, covs) {
+
+  vals <- extract(covs, occ[, c('Longitude', 'Latitude')])
+  occ <- cbind(occ, vals)
+
+  # subset, remove a text column, and convert to a matrix
+  dat <- occ[sample(seq_len(nrow(occ)), 500),-1]
+  dat <- as.matrix(dat)
+
+  all_covs <- c(surv_covs, fec_covs)
+
+  # data size
+  ncov_fecundity <- length(fec_covs)
+  ncov_survival <- length(surv_covs)
+
+  # get means and sds for scaling/rescaling
+  dat_means <- colMeans(dat[, all_covs])
+  dat_sds <- apply(dat[, all_covs], 2, sd)
+
+  # centre & scale covs to make priors meaningful
+  dat <- scale_covs(dat, dat_means, dat_sds)
+
+  # parameters
+  params <- list(
+    # sum of regression priors should have variance of 1, as a form of shrinkage
+    beta_fecundity = normal(0, 1 / ncov_fecundity, dim = ncov_fecundity),
+    beta_survival = normal(0, 1 / ncov_survival, dim = ncov_survival),
+    # no prior on the likelihood intercept
+    likelihood_intercept = variable(),
+    # uncertainty in the population means for survival and fecundity
+    default_logit_survival = normal(qlogis(0.710), sqrt(0.03806)),
+    default_log_fecundity = normal(log(0.58), 0.25)
+  )
+
+  # get all the components
+  survival <- get_survival(dat, params)
+  fecundity <- get_fecundity(dat, params)
+  lambdas <- get_lambda(survival, fecundity)
+  prob <- get_prob(lambdas, params)
+
+  # likelihood for presence-absence data
+  presence <- dat[, "PA"]
+  distribution(presence) <- bernoulli(prob)
+
+  # fit the model
+  m <- model(params$beta_fecundity,
+             params$beta_survival,
+             params$likelihood_intercept)
+
+  list(
+    model = m,
+    data = dat,
+    params = params,
+    cov_scaling = list(means = dat_means,
+                       sds = dat_sds)
+  )
+
+}
+
+make_bbs_predictions <- function (model_list, draws_list, covs) {
+
+  params <- model_list$params
+  scaling <- model_list$cov_scaling
+  draws <- draws_list$draws
+
+  # covariates for all pixels
+  raster_template <- list(
+    raster = covs[[7]] * 0,
+    idx = which(!is.na(getValues(covs[[7]])))
+  )
+
+  covs_predict <- extract(covs, raster_template$idx)
+  covs_predict <- scale_covs(covs_predict, scaling$means, scaling$sds)
+
+  # get prediction greta arrays
+  survival_predict <- get_survival(covs_predict, params)
+  fecundity_predict <- get_fecundity(covs_predict, params)
+  lambdas_predict <- get_lambda(survival_predict, fecundity_predict)
+  prob_predict <- get_prob(lambdas_predict, params)
+
+  # map posterior mean estimates of these
+  lambda_map <- map_variable(lambdas_predict, draws, raster_template)
+  prob_pres_map <- map_variable(prob_predict, draws, raster_template)
+  fec_map <- map_variable(fecundity_predict, draws, raster_template)
+  surv_map <- map_variable(survival_predict$adult, draws, raster_template)
+
+  # decrease survival by 50% across N America and get range
+  survival_predict_low <- lapply(survival_predict, "*", 0.5)
+  lambdas_low_surv <- get_lambda(survival_predict_low, fecundity_predict)
+  lambda_low_surv_map <- map_variable(lambdas_low_surv, draws, raster_template)
+
+  # decrease fecundity by 50% across N America and get range
+  lambdas_low_fec <- get_lambda(survival_predict, fecundity_predict)
+  lambda_low_fec_map <- map_variable(lambdas_low_fec, draws, raster_template)
+
+  list(
+    lambda = lambda_map,
+    prob_present = prob_pres_map,
+    fecundity = fec_map,
+    survival = surv_map,
+    lambda_low_survival = lambda_low_surv_map,
+    lambda_low_fecundity = lambda_low_fec_map
+  )
+
+}
+
+plot_bbs_maps <- function (predictions, model_list) {
+
+  dat <- model_list$data
+
+  # get range limits
+  predictions$range <- predictions$lambda > 1
+  predictions$low_surv_range <- predictions$lambda_low_survival > 1
+  predictions$low_fec_range <- predictions$lambda_low_fecundity > 1
+
+  # set up plotting colours and scales
+  Dark2 <- brewer.pal(3, "Dark2")
+  YlGnBu <- brewer.pal(9, "YlGnBu")[c(1, 1, 2, 3, 4, 5, 6, 7, 7)]
+  YlGn <- brewer.pal(9, "YlGn")
+  RdPu <- brewer.pal(9, "RdPu")
+  prob_cols <- colorRampPalette(YlGnBu)(1000)
+  surv_cols <- colorRampPalette(YlGn)(1000)
+  fec_cols <- colorRampPalette(RdPu)(1000)
+
+  legend_width <- 2
+  title_cex <- 1.3
+  title_col <- grey(0.4)
+  title_line <- -0.5
+
+  baseline_col <- "lightblue"
+  survival_col <- surv_cols[750]
+  fecundity_col <- fec_cols[400]
+
+  png("figures/bbs_fig.png",
+      width = 2400,
+      height = 1600,
+      pointsize = 45)
+
+  par(mfrow = c(2, 2),
+      oma = c(0, 1, 1, 1),
+      mar = c(1, 1, 1, 1))
+
+  # probability of presence from the DDM
+  plot(predictions$prob_present,
+       zlim = c(0, 1),
+       col = prob_cols,
+       axes = FALSE,
+       box = FALSE,
+       legend.width = legend_width,
+       maxpixels = Inf)
+
+  points(dat[, c("Longitude", "Latitude")],
+         pch = 16,
+         cex = 0.7,
+         col = grey(0.4))
+
+  points(dat[dat[, "PA"] == 1, c("Longitude", "Latitude")],
+         pch = 16,
+         cex = 1,
+         col = "black")
+
+  title(main = "probability of presence",
+        cex.main = title_cex,
+        col.main = title_col,
+        line = title_line)
+  mtext("A", 3, adj = 0, cex = 1.2)
+
+  # plot fecundity
+
+  # clip extrapolation from south east, for plotting only
+  fec_map_plot <- predictions$fecundity
+  fec_max <- 8
+  fec_map_plot[fec_map_plot > fec_max] <- fec_max
+
+  plot(fec_map_plot,
+       zlim = c(0, maxValue(fec_map_plot)),
+       axes = FALSE,
+       box = FALSE,
+       maxpixels = Inf,
+       col = fec_cols,
+       legend.width = legend_width)
+
+  title(main = "fecundity",
+        cex.main = title_cex,
+        col.main = title_col,
+        line = title_line)
+  mtext("B", 3, adj = 0, cex = 1.2)
+
+  # plot adult survival
+  plot(predictions$survival,
+       zlim = c(0, 1),
+       axes = FALSE,
+       box = FALSE,
+       col = surv_cols,
+       maxpixels = Inf,
+       legend.width = legend_width)
+
+  title(main = "survival rate",
+        cex.main = title_cex,
+        col.main = title_col,
+        line = title_line)
+  mtext("C", 3, adj = 0, cex = 1.2)
+
+  # range contractions due to demographic changes (e.g. introduced competitor or
+  # pathogen); a form of spatial sensitivity analysis
+
+  # expected range under current conditions
+  plot(predictions$range,
+       col = c(grey(0.9), baseline_col),
+       legend = FALSE,
+       axes = FALSE,
+       maxpixels = Inf,
+       box = FALSE)
+
+  # add range under decreased fertility
+  predictions$low_fec_range[predictions$low_fec_range == 0] <- NA
+  plot(predictions$low_fec_range,
+       col = fecundity_col,
+       add = TRUE,
+       maxpixels = Inf,
+       legend = FALSE)
+
+  # add range under decreased survival
+  predictions$low_surv_range[predictions$low_surv_range == 0] <- NA
+  plot(predictions$low_surv_range,
+       col = survival_col,
+       add = TRUE,
+       maxpixels = Inf,
+       legend = FALSE)
+
+  title(main = "range limits",
+        cex.main = title_cex,
+        col.main = title_col,
+        line = title_line)
+  mtext("D", 3, adj = 0, cex = 1.2)
+
+  text(x = -71, y = 35.5,
+       labels = "baseline",
+       col = "lightblue3",
+       cex = 1.4,
+       xpd = NA)
+
+  text(x = -71, y = 32,
+       labels = "low fecundity",
+       col = fecundity_col,
+       cex = 1.4,
+       xpd = NA)
+
+  text(x = -71, y = 29,
+       labels = "low survival",
+       col = survival_col,
+       cex = 1.4,
+       xpd = NA)
+
+  dev.off()
+
+}
+
 op <- greta::.internals$nodes$constructors$op
 tf <- tensorflow::tf
 
@@ -268,7 +590,7 @@ build_protea_model <- function (occurrence, informative_priors = FALSE) {
 
   size_priors <- lapply(
     names(size_dependent),
-    prior,
+    protea_prior,
     type = "size",
     informative = informative_priors
   )
@@ -395,18 +717,28 @@ build_protea_model <- function (occurrence, informative_priors = FALSE) {
 
 # do MCMC on the model
 run_mcmc <- function (model_list) {
-  draws <- mcmc(model_list$model)
+
+  timing <- system.time(
+    draws <- mcmc(model_list$model, verbose = FALSE)
+  )
+
+  list(
+    draws = draws,
+    timing = timing
+  )
+
 }
 
 # use the model and MCMC parameter samples to visualise the fitted vital rate
 # relationships (using calculate and relevant design matrices)
-plot_protea_relationships <- function(draws, model_list, occurrence) {
+plot_protea_relationships <- function(draws_list, model_list, occurrence) {
 
 }
 
 # use the model and MCMC parameter samples to make posterior predictions of
 # the probability of presence in new places (using calculate and relevant design matrices)
-make_protea_predictions <- function(draws, model_list, occurrence) {
+make_protea_predictions <- function(draws_list, model_list, occurrence) {
 
 }
+
 

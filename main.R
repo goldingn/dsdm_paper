@@ -27,13 +27,13 @@ read_all_data <- drake_plan(
 
   # bbs analysis
   bbs_covs = download_bbs_rasters(),
-  tidy_covs = writeRaster(bbs_covs, "data/clean/bbs_covs", overwrite = TRUE),
+  tidy_covs = writeRaster(bbs_covs, file_out("data/clean/bbs_covs.grd"), overwrite = TRUE),
   bbs_occurrence = download_bbs(),
-  tidy_occ = saveRDS(bbs_occurrence, "data/clean/bbs_occ.RDS"),
+  tidy_occ = saveRDS(bbs_occurrence, file_out("data/clean/bbs_occ.RDS")),
 
   # protea analysis
   protea_occurrence = download_merow(),
-  tidy_file = saveRDS(protea_occurrence, "data/clean/protea_occurrence.RDS")
+  tidy_file = saveRDS(protea_occurrence, file_out("data/clean/protea_occurrence.RDS"))
 
 )
 
@@ -42,6 +42,32 @@ old_plan <- future::plan()
 future::plan(multisession)
 make(read_all_data)
 future::plan(old_plan)
+
+# fit models ---------------------------------------------------------------
+
+source("R/modelling.R")
+
+fit_bbs_model <- drake_plan(
+  bbs_occurrence = readRDS(file_in("data/clean/bbs_occ.RDS")),
+  bbs_covs = brick(file_in("data/clean/bbs_covs.grd")),
+  model_list = build_bbs_model(bbs_occurrence, bbs_covs),
+  draws_list = run_mcmc(model_list),
+  predictions = make_bbs_predictions(model_list, draws_list, bbs_covs),
+  plots = plot_bbs_maps(predictions, model_list),
+  stats = compare_bbs_predictions(predictions, model_list)
+)
+
+make(fit_bbs_model)
+
+fit_protea_model <- drake_plan(
+  protea_occurrence = readRDS(file_in("data/clean/protea_occurrence.RDS")),
+  model_list = build_protea_model(protea_occurrence),
+  draws_list = run_mcmc(model_list),
+  relationships_fig = plot_protea_relationships(model_list, draws_list, protea_occurrence),
+  predictions = make_protea_predictions(model_list, draws_list, protea_occurrence)
+)
+
+make(fit_protea_model)
 
 # plot data  --------------------------------------------------------
 
@@ -55,18 +81,4 @@ plot_protea_data <- drake_plan(
 
 make(plot_protea_data)
 
-
-# fit model ---------------------------------------------------------------
-
-source("R/modelling.R")
-
-fit_protea_model <- drake_plan(
-  protea_occurrence = readRDS(file_in("data/clean/protea_occurrence.RDS")),
-  model_list = build_protea_model(protea_occurrence),
-  draws = run_mcmc(model_list),
-  relationships_fig = plot_protea_relationships(model_list, draws, occurrence),
-  predictions = make_protea_predictions(model_list, draws, occurrence)
-)
-
-make(fit_model)
 
