@@ -53,7 +53,7 @@ get_prob <- function (lambdas, params) {
 }
 
 # randomly split data into training and test datasets, and compute other useful data things
-split_data <- function (occ, covs) {
+split_data <- function (occ, covs, maps_coords) {
 
   # covariates for all pixels
   raster_template <- list(
@@ -61,19 +61,25 @@ split_data <- function (occ, covs) {
     idx = which(!is.na(getValues(covs[[7]])))
   )
 
-  # scale covs to have zero mean (so intercept can be defined as a spatial average) and variance 1
-  covs <- scale(covs)
+  # scale covs to have zero mean at the average maps location (so intercept can
+  # be defined as a spatial average over maps data) and variance 1 (realtive to )
+  all_vals <- getValues(covs)
+  station_vals <- extract(covs, maps_coords[, c("lon", "lat")])
+  means <- apply(station_vals, 2, weighted.mean, maps_coords$weight)
+  diffs <- sweep(all_vals, 2, means, "-")
+  sds <- sqrt(colMeans(diffs ^ 2, na.rm = TRUE))
+  all_vals_scaled <- sweep(diffs, 2, sds, "/")
+  covs <- setValues(covs, all_vals_scaled)
 
+  # extract all scaled covariate values, and combine with
   coords <- occ[, c("Longitude", "Latitude")]
   vals <- extract(covs, coords)
   occ <- occ[, -(1:2)]
   all <- cbind(occ, vals)
   all <- na.omit(all)
 
-
   # subset, remove a text column, and convert to a matrix
   train_idx <- sample.int(nrow(all), 500)
-
 
   list(
     train = all[train_idx, ],

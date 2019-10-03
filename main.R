@@ -31,6 +31,8 @@ read_all_data <- drake_plan(
   tidy_covs = writeRaster(bbs_covs, file_out("data/clean/bbs_covs.grd"), overwrite = TRUE),
   bbs_occurrence = download_bbs(),
   tidy_occ = saveRDS(bbs_occurrence, file_out("data/clean/bbs_occ.RDS")),
+  maps_coords = download_maps_locations(),
+  tidy_maps = saveRDS(maps_coords, file_out("data/clean/maps_stations.RDS")),
 
   # protea analysis
   protea_occurrence = download_merow(),
@@ -51,14 +53,16 @@ source("R/modelling.R")
 fit_bbs_model <- drake_plan(
   bbs_occurrence = readRDS(file_in("data/clean/bbs_occ.RDS")),
   bbs_covs = brick(file_in("data/clean/bbs_covs.grd")),
-  data_list = split_data(bbs_occurrence, bbs_covs),
+  maps_coords = readRDS(file_in("data/clean/maps_stations.RDS")),
+  data_list = split_data(bbs_occurrence, bbs_covs, maps_coords),
   model_list = build_bbs_model(data_list),
   draws_list = run_mcmc(model_list),
   draws_summary = check_draws(draws_list, "bbs"),
   predictions = make_bbs_predictions(model_list, draws_list, data_list),
   plots = plot_bbs_maps(predictions, model_list),
   stats = compare_bbs_predictions(predictions, data_list),
-  save = saveRDS(stats, file_out("data/clean/bbs_stats.RDS"))
+  save = saveRDS(stats, file_out("data/clean/bbs_stats.RDS")),
+  print(stats)
 )
 
 make(fit_bbs_model)

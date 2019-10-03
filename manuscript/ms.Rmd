@@ -130,6 +130,12 @@ logit(S_{Ji}) &= logit(S_{Ai}) - 0.94 \\ \nonumber
 \beta_{Fi} &\sim N(0, 1)
 \end{align}
 
+TODO:
+ - change this to have generic intercepts ($\alpha_F$ and $\alpha_S$), then define those intercepts below.
+ - reword the below dso that the general formulation doesn't talk about the priors for the intercepts
+ - introduce all the parts of the model here first, then have a section below this where we talk about prior ($\alpha_F \sim N(0.58, 0.25 ^ 2)$ etc.)
+ - reword the centring of X to make it clear we are centreing against the (weighted) locations where the fecundity and survival estimates were made.
+
 where $\mathbf{X}_{F}$ and $\mathbf{X}_{S}$ are matrices of covariates for the fecundity and survival submodels respectively, and $\beta_F$ and $\beta_S$ are the corresponding vectors of regression coefficients, to which we assign minimally-informative priors. These design matrices do not include dummy intercept columns, but instead covariates are centred so that their average value is zero over the contiguous USA, and the intercept is modelled via a separate parameter representing the spatial average of these rates.
 We use the estimates of @ryuDevelopingPopulationModels2016 as informative priors for these continental average rates, with normal distributions truncated to the appropriate range of values (positive values for fecundity, and the unit interval for survival).
 Rather than separately modelling spatial variation in adult and juvenile fecundity, we assume that the environmental predictors of survival are the same in both stages, but that juvenile survival is consistently lower than adult survival.

@@ -79,6 +79,61 @@ download_bbs_rasters <- function () {
   # writeRaster(covs, file = "data/clean/bbs_covs")
 }
 
+# download the station names where this species was collected to derive vital
+# rate estimates, and the coordinates of those stations
+download_maps_locations <- function () {
+
+  # get the data used to fit vital rates for the Carolina Chickadee
+  cach_url <- "https://raw.githubusercontent.com/Akcakaya/MAPS-to-Models/master/Public%20dataset/CACH_BandDataAllMonths.csv"
+  cach_data <- read.csv(cach_url)
+
+  # convert to weights (how much the inferred rates were due to that station)
+  station_counts <- table(cach_data$station)
+  station_weights <- station_counts / sum(station_counts)
+
+  # scrape the station information
+  stations_url <- "https://www.birdpop.org/pages/mapsMap.php"
+  stations_text <- readLines(stations_url)
+  stations_html <- xml2::read_html(paste(stations_text, collapse = "\n"))
+  stations_list <- xml2::as_list(stations_html)
+
+  # pull out the section of the JS code with the station data
+  js_functions <- stations_list$html$head[[11]][[1]]
+  js_function_split <- strsplit(js_functions, "\n")[[1]]
+  circles <- js_function_split[32:1317]
+
+  # parse these to find the station code and the coordinates
+  ids <- vapply(circles, get_code, "STATION ID", FUN.VALUE = character(1))
+  lats <- vapply(circles, get_code, "LATITUDE", FUN.VALUE = character(1))
+  lons <- vapply(circles, get_code, "LONGITUDE", FUN.VALUE = character(1))
+  names(ids) <- names(lats) <- names(lons) <- NULL
+
+  stations <- data.frame(
+    id = ids,
+    lat = as.numeric(lats),
+    lon = as.numeric(lons),
+    stringsAsFactors = FALSE
+  )
+
+  # subset this to the stations of interest and add the weights
+  idx <- match(names(station_weights), stations$id)
+  stations <- stations[idx, ]
+  stations$weight <- station_weights
+  stations
+
+}
+
+get_code <- function(text, field) {
+
+  start <- paste0(field, ":</span> ")
+  end <- "<br>"
+
+  text <- strsplit(text, start)[[1]][2]
+  text <- strsplit(text, end)[[1]][1]
+  text
+
+}
+
 clean_bbs <- function(file, AOU, years = 2015) {
 
   bbs <- read.csv(file, stringsAsFactors = FALSE)
@@ -155,6 +210,5 @@ download_bbs <- function (aou = 7360) {
   species <- species[!is.na(species$Longitude),]
 
   species
-  # saveRDS(species, file = "data/clean/BBS_species.RDS")
 
 }
