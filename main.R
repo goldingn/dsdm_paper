@@ -16,6 +16,7 @@ library(RColorBrewer)
 library(dplyr)
 library(maxlike)
 library(pROC)
+library(truncdist)
 
 # modelling
 library(greta.dynamics)
@@ -51,18 +52,30 @@ future::plan(old_plan)
 source("R/modelling.R")
 
 fit_bbs_model <- drake_plan(
+
+  # prep data
   bbs_occurrence = readRDS(file_in("data/clean/bbs_occ.RDS")),
   bbs_covs = brick(file_in("data/clean/bbs_covs.grd")),
   maps_coords = readRDS(file_in("data/clean/maps_stations.RDS")),
-  data_list = split_data(bbs_occurrence, bbs_covs, maps_coords),
-  model_list = build_bbs_model(data_list),
-  draws_list = run_mcmc(model_list),
-  draws_summary = check_draws(draws_list, "bbs"),
-  predictions = make_bbs_predictions(model_list, draws_list, data_list),
-  plots = plot_bbs_maps(predictions, model_list),
-  stats = compare_bbs_predictions(predictions, data_list),
-  save = saveRDS(stats, file_out("data/clean/bbs_stats.RDS")),
-  print(stats)
+  bbs_data_list = split_data(bbs_occurrence, bbs_covs, maps_coords),
+
+  # model fitting
+  bbs_model_list = build_bbs_model(bbs_data_list),
+  bbs_draws_list = run_mcmc(bbs_model_list),
+  bbs_draws_summary = check_draws(bbs_draws_list, "bbs"),
+
+  # also fit the analytic version
+  bbs_analytic_model_list = build_bbs_model(bbs_data_list, analytic = TRUE),
+  bbs_analytic_draws_list = run_mcmc(bbs_analytic_model_list),
+  bbs_analytic_draws_summary = check_draws(bbs_analytic_draws_list, "bbs"),
+
+  # prediction
+  bbs_predictions = make_bbs_predictions(bbs_model_list,
+                                         bbs_draws_list,
+                                         bbs_data_list),
+  bbs_plots = plot_bbs_maps(bbs_predictions, bbs_data_list),
+  bbs_stats = compare_bbs_predictions(bbs_predictions, bbs_data_list),
+
 )
 
 make(fit_bbs_model)

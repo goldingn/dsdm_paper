@@ -33,18 +33,30 @@ get_fecundity <- function (covs, params) {
   exp(fecundity_log)
 }
 
-get_lambda <- function(survival, fecundity) {
+get_lambda <- function(survival, fecundity, analytic = FALSE) {
 
-  # build n x m x m 3D array containing Leslie matrices for different locations
-  top_row <- cbind(fecundity * survival$juvenile,
-                   fecundity * survival$adult)
-  bottom_row <- cbind(survival$juvenile,
-                      survival$adult)
-  matrices <- abind(top_row, bottom_row, along = 3)
+  # use either the analytic solution (specific to this simple model) or the
+  # numeric solution (which is more geneeral to DSDMs)
+  if (analytic) {
 
-  # loop across observations, iterating matrices (only 10 times, for speed) to get implied intrinsic growth
-  iterated <- greta.dynamics::iterate_matrix(matrices, niter = 10)
-  iterated$lambda
+    lambda <- survival$adult * (0.94 * fecundity + 1)
+
+  } else {
+
+    # build n x m x m 3D array containing Leslie matrices for different locations
+    top_row <- cbind(fecundity * survival$juvenile,
+                     fecundity * survival$adult)
+    bottom_row <- cbind(survival$juvenile,
+                        survival$adult)
+    matrices <- abind(top_row, bottom_row, along = 3)
+
+    # loop across observations, iterating matrices to get implied intrinsic growth
+    iterated <- greta.dynamics::iterate_matrix(matrices)
+    lambda <- iterated$lambda
+
+  }
+
+  lambda
 
 }
 
@@ -114,7 +126,7 @@ build_bbs_model <- function (data_list) {
   # get all the components
   survival <- get_survival(data_list$train, params)
   fecundity <- get_fecundity(data_list$train, params)
-  lambdas <- get_lambda(survival, fecundity)
+  lambdas <- get_lambda(survival, fecundity, analytic = analytic)
   prob <- get_prob(lambdas, params)
 
   # likelihood for presence-absence data
@@ -149,7 +161,7 @@ make_bbs_predictions <- function (model_list, draws_list, data_list) {
   # get prediction greta arrays
   survival_predict <- get_survival(covs_predict, params)
   fecundity_predict <- get_fecundity(covs_predict, params)
-  lambdas_predict <- get_lambda(survival_predict, fecundity_predict)
+  lambdas_predict <- get_lambda(survival_predict, fecundity_predict, analytic = TRUE)
   prob_predict <- get_prob(lambdas_predict, params)
 
   # map posterior mean estimates of these
@@ -160,11 +172,11 @@ make_bbs_predictions <- function (model_list, draws_list, data_list) {
 
   # decrease survival by 50% across N America
   survival_predict_low <- lapply(survival_predict, "*", 0.5)
-  lambdas_low_surv <- get_lambda(survival_predict_low, fecundity_predict)
+  lambdas_low_surv <- get_lambda(survival_predict_low, fecundity_predict, analytic = TRUE)
   lambda_low_surv_map <- map_variable(lambdas_low_surv, draws, raster_template)
 
   # decrease fecundity by 50% across N Americ
-  lambdas_low_fec <- get_lambda(survival_predict, fecundity_predict * 0.5)
+  lambdas_low_fec <- get_lambda(survival_predict, fecundity_predict * 0.5, analytic = TRUE)
   lambda_low_fec_map <- map_variable(lambdas_low_fec, draws, raster_template)
 
   list(
