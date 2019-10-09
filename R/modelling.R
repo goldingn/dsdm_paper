@@ -12,17 +12,15 @@ map_variable <- function (greta_array, draws, raster_template) {
   map
 }
 
-surv_covs <- c("bio1", "bio12", "bio6")
-fec_covs <- c("pcMix", "pcDec", "pcCon", "bio1", "bio12")
-all_covs <- unique(c(surv_covs, fec_covs))
+# use all covariates in both models
+surv_covs <- fec_covs <- all_covs <- c("pcMix", "pcDec", "pcCon", "bio1", "bio6", "bio12")
 
 # calculate survival, given covariates
 get_survival <- function (covs, params) {
   x_survival <- covs[, surv_covs]
   survival_logit <- x_survival %*% params$beta_survival + params$default_logit_survival
   survival_adult <- ilogit(survival_logit)
-  juvenile_offset <- qlogis(0.489) - qlogis(0.710)
-  survival_juvenile <- ilogit(survival_logit + juvenile_offset)
+  survival_juvenile <- ilogit(survival_logit - params$gamma)
   list(adult = survival_adult,
        juvenile = survival_juvenile)
 }
@@ -77,7 +75,8 @@ split_data <- function (occ, covs, maps_coords) {
   # be defined as a spatial average over maps data) and variance 1 (realtive to )
   all_vals <- getValues(covs)
   station_vals <- extract(covs, maps_coords[, c("lon", "lat")])
-  means <- apply(station_vals, 2, weighted.mean, maps_coords$weight)
+  # means <- apply(station_vals, 2, weighted.mean, maps_coords$weight)
+  means <- colMeans(station_vals)
   diffs <- sweep(all_vals, 2, means, "-")
   sds <- sqrt(colMeans(diffs ^ 2, na.rm = TRUE))
   all_vals_scaled <- sweep(diffs, 2, sds, "/")
@@ -103,21 +102,58 @@ split_data <- function (occ, covs, maps_coords) {
 
 }
 
-build_bbs_model <- function (data_list) {
+# estimate the prior for gamma, from the difference between two
+# logit-transformed truncated normal distributions
+est_gamma <- function (n = 1e5) {
+  S_A <- truncdist::rtrunc(n, "norm", 0, 1, 0.71, sqrt(0.03806))
+  S_J <- truncdist::rtrunc(n, "norm", 0, 1, 0.489, sqrt(0.03806))
+  gamma <- qlogis(S_A) - qlogis(S_J)
+  list(mean = mean(gamma),
+       sd = sd(gamma))
+}
+
+
+build_bbs_model <- function (data_list, analytic = FALSE) {
 
   # data size
   ncov_fecundity <- length(fec_covs)
   ncov_survival <- length(surv_covs)
 
+  priors <- list(
+    beta = list(mean = 0, sd = 10),
+    default_survival = list(mean = 0.710, sd = sqrt(0.03806)),
+    default_fecundity = list(mean = 0.58, sd = 0.25),
+    gamma = est_gamma()
+  )
+
   # parameters
   params <- list(
-    beta_fecundity = normal(0, 1, dim = ncov_fecundity),
-    beta_survival = normal(0, 1, dim = ncov_survival),
+    beta_fecundity = normal(
+      priors$beta$mean,
+      priors$beta$sd,
+      dim = ncov_fecundity
+    ),
+    beta_survival = normal(
+      priors$beta$mean,
+      priors$beta$sd,
+      dim = ncov_survival
+    ),
     # no prior on the likelihood intercept
     alpha = variable(lower = 0),
     # uncertainty in the population means for survival and fecundity
-    default_survival = normal(0.710, sqrt(0.03806), truncation = c(0, 1)),
-    default_fecundity = normal(0.58, 0.25, truncation = c(0, Inf))
+    default_survival = normal(
+      priors$default_survival$mean,
+      priors$default_survival$sd,
+      truncation = c(0, 1)
+      ),
+    default_fecundity = normal(
+      priors$default_fecundity$mean,
+      priors$default_fecundity$sd,
+      truncation = c(0, Inf)),
+    gamma = normal(
+      priors$default_fecundity$mean,
+      priors$default_fecundity$sd
+    )
   )
   params$default_logit_survival <- log(params$default_survival / (1 - params$default_survival))
   params$default_log_fecundity <- log(params$default_fecundity)
@@ -144,7 +180,8 @@ build_bbs_model <- function (data_list) {
 
   list(
     model = m,
-    params = params
+    params = params,
+    priors = priors
   )
 
 }
@@ -190,9 +227,9 @@ make_bbs_predictions <- function (model_list, draws_list, data_list) {
 
 }
 
-plot_bbs_maps <- function (predictions, model_list) {
+plot_bbs_maps <- function (predictions, data_list) {
 
-  dat <- model_list$data
+  dat <- data_list$train
 
   # get range limits
   predictions$range <- predictions$lambda > 1
@@ -236,13 +273,15 @@ plot_bbs_maps <- function (predictions, model_list) {
        maxpixels = Inf)
 
   points(dat[, c("Longitude", "Latitude")],
-         pch = 16,
+         pch = 21,
          cex = 0.7,
+         bg = "white",
+         lwd = 4,
          col = grey(0.4))
 
   points(dat[dat[, "PA"] == 1, c("Longitude", "Latitude")],
          pch = 16,
-         cex = 1,
+         cex = 0.7,
          col = "black")
 
   title(main = "probability of presence",

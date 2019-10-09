@@ -38,9 +38,59 @@ knitr::opts_chunk$set(fig.path = "figs/",
 
 
 ```{r stats, echo = FALSE, cache = FALSE, eval = TRUE}
-# read in statistics from modelling to insert in text
 
-bbs_stats <- readRDS("../data/clean/bbs_stats.RDS")
+# get all cached drake objects
+library(storr)
+cache <- storr_rds(drake::find_cache())
+
+# bbs objects
+
+# data size
+bbs_data <- cache$get("bbs_data_list")
+bbs_n_train <- nrow(bbs_data$train)
+bbs_n_test <- nrow(bbs_data$test)
+
+# timings
+bbs_time <- cache$get("bbs_draws_list")$timing["elapsed"]
+bbs_analytic_time <- cache$get("bbs_analytic_draws_list")$timing["elapsed"]
+
+# effective sample sizes
+bbs_draws_sry <- cache$get("bbs_draws_summary")
+bbs_neff <- round(min(bbs_draws_sry$n_eff), -3)
+
+# the R hat below which all parameter estimates fall (print 1.01 if it's less
+# than that)
+bbs_max_rhat <- max(bbs_draws_sry$r_hat$psrf[, 1])
+bbs_max_rhat <- max(bbs_max_rhat, 1.01)
+
+# format parameter estimates
+bbs_means <- bbs_draws_sry$summary$statistics[, "Mean"]
+bbs_cis <- bbs_draws_sry$summary$quantiles[, c("2.5%", "97.5%")]
+bbs_cov_names <- cache$get("all_covs")
+bbs_params <- cbind(data.frame(mean = bbs_means), bbs_cis)
+bbs_params <- bbs_params[seq_len(2 * length(bbs_cov_names)), ]
+
+text <- sprintf("%s (%s - %s)",
+                format(bbs_params$mean, digits = 2, trim = FALSE),
+                format(bbs_params$`2.5%`, digits = 1, trim = FALSE),
+                format(bbs_params$`97.5%`, digits = 1, trim = FALSE))
+
+name_lookup <- matrix(
+  c("pcMix", "mixed forest cover",
+    "pcDec", "deciduous forest cover",
+    "pcCon", "coniferous forest cover",
+    "bio1", "annual mean temperature",
+    "bio6", "min temperature of coldest month",
+    "bio12", "annual precipitation"),
+  ncol = 2, byrow = TRUE
+)
+
+bbs_coef_mat <- matrix(text, ncol = 2)
+rownames(bbs_coef_mat) <- name_lookup[match(bbs_cov_names, name_lookup[, 1]), 2]
+colnames(bbs_coef_mat) <- c("fecundity", "survival")
+
+# statistics comparing DSDM and GLM
+bbs_stats <- cache$get("bbs_stats")
 bbs_stats <- lapply(bbs_stats, round, 3)
 
 ```
@@ -76,7 +126,7 @@ Because they do not model vital rates directly DRMs, like correlative SDMs, are 
 By contrast, matrix population models and integral projection models (IPMs) are demographic models of single populations that construct and analyse a transition matrix representing key demographic processes [@merowAdvancingPopulationEcology2014].
 Spatial IPMs extend this idea to map distributions by modelling demographic rates as a function of covariates, then analysing transition matrices under different conditions to map emergent demographic quantities (such as the intrinsic growth rate) to characterize the species’ distribution [@merowUsingIntegralProjection2014].
 
-<SIPMs (DDMs in Merow - note on nomenclature) apply these to large spatial scales. Whilst they rely on vast amnounts field data (so are not applicable in most SDM situations), they provide a link between demography and distribution, so we could perform statistical inference on them using distribution data. This is what we call a DSDM - the subject of this manuscript.
+<SIPMs (DDMs in Merow - note on nomenclature) apply these to large spatial scales. Whilst they rely on vast amnounts field data (so are not applicable in most SDM situations), they provide a link between demography and distribution, making it possible to perform statistical inference on them using distribution data. This is what I call a DSDM - the subject of this manuscript.>
 
 Whilst the concept is simple, it is not obvious that multiple spatial surfaces (vital rate distributions) can be inferred from a single spatial dataset of a species' distribution.
 Nor is it obvious that such a model can be fitted to data with sufficiently ease and speed to be useful to ecologists.
@@ -91,7 +141,6 @@ Example 2 then develops a more complex DSDM incorporating detailed knowledge of 
 <blame link between growth rate and probability of presence on Jorn, point reader to section on extensions for density-dependent solution>
 <suggest doing Bayesian inference - propagate uncertainty and incorporate any prior information to help the model disentangle the spatial signal>
 
-
 ```{r schematic, echo = FALSE, fig.cap = "Demographic species distribution models in the context of other models of distribution and demography. A) Correlative species distribution models (SDMs) use a correlative mathematical relationship - such as a logit-linear model - to predict a species' distribution from spatial covariates. The predicted distribution (for a given set of parameter values) is compared to observed distribution data using an observation model - such as a Bernoulli distribution, for presence-absence data. Statistical inference is performed to infer the correlative model parameters from the distribution data. B) Matrix population models (MPMs) and integral projections models (IPMs) combine either direct estimates, or correlative models, of vital rates like survival and fecundity to predict demographic quantities such as the population growth rate. Spatial IPMs apply these models to covariate values at each pixel in the landscape, and therefore map the distributions of vital rates and species. Unlike correlative SDMs, the parameters of MPMs, IPMs, and spatial IPMs are inferred from data on population dynamics at specific locations, rather than distribution data. Demographic SDMs (proposed here) combine correlative SDMs and spatial IPMs; replacing the arbitrary correlative model in a correlative SDM with an MPM or IPM, and inferring model parameters by fitting the whole model statistically to observed distributions. Equations correspond to the model considered in Example 1, but represent a wide range of correlative, population dynamic, and observation models that could be used in this framework.", out.width = "\\textwidth"}
 knitr::include_graphics("../figures/schematic.png")
 ```
@@ -101,68 +150,74 @@ knitr::include_graphics("../figures/schematic.png")
 
 This section demonstrates the construction, fitting and analysis of a basic DSDM for the Carolina Chickadee *Poecile carolinensis* in the contiguous USA.
 A two-stage matrix population model for the species has previously been developed for the USA [@ryuDevelopingPopulationModels2016], and used to carry out a population viability analysis.
-Parameters of the model - fecundity and survival rates for adults and juveniles - were estimated from mark-recapture data across the United States, and these estimates and the resulting matrix therefore represent a single spatial average of these rates over the continent.
+Parameters of the model - fecundity and survival rates for adults and juveniles - were estimated from mark-recapture data at a number of survey stations across the United States.
+These estimates and the resulting matrix therefore represent a single (spatial) average population over the survey stations where the species was detected.
 The model structure is:
 
 \begin{align}
 \tilde{\mathbf{A}} = \begin{pmatrix} \widetilde{F} \cdot \widetilde{S}_J & \widetilde{F} \cdot \widetilde{S}_A \\ \widetilde{S}_J & \widetilde{S}_A \end{pmatrix}
 \end{align}
 
-where I use $\tilde{\mathbf{A}}$ to denote a transition matrix representing the continental average population, and $\widetilde{F}$, $\widetilde{S}_j$, and $\widetilde{S}_a$ are similarly spatially-averaged annual fecundity, juvenile survival, and adult survival rates respectively.
-Tables 2-4 in @ryuDevelopingPopulationModels2016 give the following parameter estimates, along with estimates of variability expressed here as standard deviations: $\widetilde{F}$ = 0.58 ($\pm$ 0.25), $\widetilde{S}_j$ = 0.710 ($\pm$ 0.195), $\widetilde{S}_a$ = 0.489 ($\pm$ 0.195)
+where I use $\tilde{\mathbf{A}}$ to denote a transition matrix representing this spatially-averaged population, and $\widetilde{F}$, $\widetilde{S}_J$, and $\widetilde{S}_A$ are similarly spatially-averaged annual fecundity, juvenile survival, and adult survival rates respectively.
+Tables 2-4 in @ryuDevelopingPopulationModels2016 give the following parameter estimates, along with estimates of variability expressed here as standard deviations: $\widetilde{F}$ = 0.58 ($\pm$ 0.25), $\widetilde{S}_A$ = 0.710 ($\pm$ 0.195), $\widetilde{S}_J$ = 0.489 ($\pm$ 0.195)
 
-Whilst these estimates provide detailed information with which to predict population trajectories in the US as a whole, they do not provide any information about how vital rates varies across the continent, and don't help use to predict the species' distribution.
+Whilst these estimates provide detailed information with which to predict population trajectories for the US as a whole, they do not provide any information about how vital rates vary across the continent, and so don't help us to predict the species' distribution.
 To this end, I constructed a DSDM based on this model, but where the population in each location $i$ has a distinct set of vital rates and resulting population transition matrix:
 
 \begin{align}
 \mathbf{A}_i = \begin{pmatrix} F_i \cdot S_{Ji} & F_i \cdot S_{Ai} \\ S_{Ji} & S_{Ai}  \end{pmatrix}
 \end{align}
 
-I construct log-linear and logit-linear models for the fecundity and survival rates, such that they vary spatially as a function of environmental covariates, just as the probability of presence does in a correlative SDM:
+I constructeed log-linear and logit-linear models for the fecundity and survival rates, such that they vary spatially as a function of environmental covariates, just as the probability of presence does in a correlative SDM:
 
 \begin{align}
-ln(F_i) &= ln(\widetilde{F}) + \mathbf{X}_{Fi}\beta_F \\ \nonumber
-logit(S_{Ai}) &= logit(\widetilde{S}_A) + \mathbf{X}_{Si}\beta_S \\ \nonumber
-logit(S_{Ji}) &= logit(S_{Ai}) - 0.94 \\ \nonumber
-\widetilde{F} &\sim N^+(-0.545, 0.25^2) \\ \nonumber
-\widetilde{S}_A &\sim N^{(0,1)}(0.895, 0.195^2) \\ \nonumber
-\beta_{Si} &\sim N(0, 1) \\ \nonumber
-\beta_{Fi} &\sim N(0, 1)
+ln(F_i) &= \alpha_F + \mathbf{X}_i\beta_F \\ \nonumber
+logit(S_{Ai}) &= \alpha_S + \mathbf{X}_i\beta_S \\ \nonumber
+logit(S_{Ji}) &= logit(S_{Ai}) - \gamma
 \end{align}
 
-TODO:
- - change this to have generic intercepts ($\alpha_F$ and $\alpha_S$), then define those intercepts below.
- - reword the below dso that the general formulation doesn't talk about the priors for the intercepts
- - introduce all the parts of the model here first, then have a section below this where we talk about prior ($\alpha_F \sim N(0.58, 0.25 ^ 2)$ etc.)
- - reword the centring of X to make it clear we are centreing against the (weighted) locations where the fecundity and survival estimates were made.
+where $\mathbf{X}$ is a matrix of environmental covariates for the fecundity and survival submodels, $\alpha_F$ and $\alpha_S$ are the corresponding intercept parameters, and $\beta_F$ and $\beta_S$ are vectors of regression coefficients for the two submodels.
+Rather than separately modelling spatial variation in adult and juvenile fecundity, I assume that the environmental predictors of survival are the same in both stages, but that juvenile survival differs from adult survival by a constant amount on the logit scale (to maintain the 0-1 constraints on survival parameters).
 
-where $\mathbf{X}_{F}$ and $\mathbf{X}_{S}$ are matrices of covariates for the fecundity and survival submodels respectively, and $\beta_F$ and $\beta_S$ are the corresponding vectors of regression coefficients, to which we assign minimally-informative priors. These design matrices do not include dummy intercept columns, but instead covariates are centred so that their average value is zero over the contiguous USA, and the intercept is modelled via a separate parameter representing the spatial average of these rates.
-We use the estimates of @ryuDevelopingPopulationModels2016 as informative priors for these continental average rates, with normal distributions truncated to the appropriate range of values (positive values for fecundity, and the unit interval for survival).
-Rather than separately modelling spatial variation in adult and juvenile fecundity, we assume that the environmental predictors of survival are the same in both stages, but that juvenile survival is consistently lower than adult survival.
-We fix the difference between adult and juvenile survival (on the logit scale to maintain the 0-1 constraints on survival parameters) to be the difference between the continental average estimates ($logit(0.710) - logit(0.489) = 0.94$).
-
-Finally, we specify and observation model for the presence-absence data in the breeding-bird survey:
+I specify an observation model for the presence-absence data in the breeding-bird survey:
 
 \begin{align}
 y_i &\sim Bernoulli(p_i) \\ \nonumber
 p_i &= 1 - e^{-N_i} \\ \nonumber
-N_i &= \alpha \lambda_i  \\ \nonumber
-\lambda_i &= eigval(\mathbf{A_i}) \\ \nonumber
-\alpha &\sim U(0, \infty)
+N_i &= \tau \lambda_i  \\ \nonumber
+\lambda_i &= eigval(\mathbf{A_i})
 \end{align}
 
-where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the populations at location $i$. We make a statistically convenient but biologically naive assumption that the size of each population is proportional to its intrinsic growth rate - a relationship that would arise from a constant (not density-dependent) competitive pressure. This assumption is made in other population models such as dynamic range models [@pagelForecastingSpeciesRanges2012], and as we discuss in the text below DSDMs can easily incorporate more complex and realistic forms of density-dependence. The parameter $\alpha$ represents the product of both this constant of proportionality, and the fraction of individuals in the population detected in this year of the survey, and we assign it an improper uniform prior on all positive values. This yields $N_i$, the expected number of individuals detected during the survey, from which we can calculate the Bernoulli probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
+where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the populations at location $i$. Imake a statistically convenient but biologically naive assumption that the size of each population is proportional to its intrinsic growth rate - a relationship that would arise from a constant (not density-dependent) competitive pressure. This simplifying assumption has been made in other spatial population models such as dynamic range models [@pagelForecastingSpeciesRanges2012]. As discussed in the text below, DSDMs can easily incorporate more complex and realistic forms of density-dependence as required.
+The parameter $\tau$ represents the product of this constant of proportionality with the individual-level detection rate (fraction of individuals in the population detected in this year of the survey). This yields $N_i$, the expected number of individuals detected during the survey, which gives the probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
 
-We fitted the model to a random subset of 500 presence-absence records from the North American Breeding Bird Survey in 2015 [@sauerNorthAmericanBreeding2011].
-We used as six environmental covariates as predictors in the fecundity and survival models, with partial overlap i the predictors between the models. Percentage cover of deciduous forest, coniferous forest, and mixed forest (data provided in [@royleLikelihoodAnalysisSpecies2012]) were used as covariates for fecundity, since they represent available breeding habitat. Minimum temperature (from @fickWorldClimNew1km2017) was used in the survival model, to capture thermal limits on survival of the species, and annual precipitation and mean temperature from the same data source were used in both the fecundity and survival models, as proxies for insect abundance, which is expected to drive both rates in this insectovorous species.
+This model provides a very general DSDM structure for presence-absence data that could be applied to a wide array of species. I refined it for this application by encoding knowledge of the ecology of the Carolina Chickadee in prior distributions over the model parameters:
 
-Inference was by Hamiltonian Monte Carlo using the R package greta [@goldingGretaSimpleScalable2019] and its extension package greta.dynamics [@goldingGretaDynamicsModelling2019] for modelling dynamical systems. Four chains were run for 1000 iterations each (after 1000 discarded iterations during which the sampler was burnt-in and tuned), which was sufficent to ensure convergence ($\hat{R}\le1.01$), and yield at least X effective samples, for all model parameters. This took Y seconds on a laptop computer.
+\begin{align}
+exp(\alpha_F) &\sim N^+(-0.545, 0.25^2) \\ \nonumber
+logit(\alpha_S)^{-1} &\sim N^{(0,1)}(0.895, 0.195^2) \\ \nonumber
+\gamma &\sim N(0.99, 1.42) \\ \nonumber
+\beta_{S,k} &\sim N(0, 1) \\ \nonumber
+\beta_{F,k} &\sim N(0, 1) \\ \nonumber
+\tau &\sim U(0, \infty)
+\end{align}.
 
-The fitted DSDM yields predictions of the probability of presence like those from a correlative SDM (Fig. 2A). The predicted probabilities are very similar and have similar accuracy: predictions from a maximum likelihood logistic regression model fitted to the same data had a correlation of `r bbs_stats$glm_dsdm_correl` with the DSDM predictions, and similar AUC and correlation when compared with the true data in the 1,933 survey locations not used to train the model (GLM: AUC = `r bbs_stats$glm_auc`, correlation = `r bbs_stats$glm_pa_correl`, DSDM: AUC = `r bbs_stats$dsdm_auc`, correlation = `r bbs_stats$dsdm_pa_correl`).
+The spatially-averaged survival and fecundity estimates from @ryuDevelopingPopulationModels2016 are used to define priors on the intercepts for the vital rate submodels. The means and standard deviations of the estimates define normally-distributed priors on the average fecundity and adult survival over the support of those parameters ($N^+$ and $N^{(0,1)}$ denoting truncation to positive values and to the unit interval), and these are transformed via the link function to be unconstrained. The logit-difference between adult and juvenile survival $\gamma$ was assigned a normal prior with parameters (estimated via Monte Carlo simulation) that approximate a $N(0.489, 0.195 ^ 2)$ prior distribution over the intercept on survival for juveniles: $logit^{-1}(\alpha_S - \gamma)$, corresponding to the juvenile survival estimate from @ryuDevelopingPopulationModels2016.
+Because these intercepts correspond to the average vital rates over locations where the species was surveyed, I centred the values in the matrix of covariate values $\mathbf{X}$ to have zero mean over the locations of the survey sites from which the recapture data were obtained that were used to estimate vital rates (station names provided in the supplemental data to @ryuDevelopingPopulationModels2016). Consequently, a population in a site with the environmental conditions matching the average environmental conditions of these survey sites would have vital rates corresponding to those given by @ryuDevelopingPopulationModels2016, and spatial variation about these estimates is modelled by the regression coefficients. I also standardised the covariate values to have standard deviation 1 (relative to these survey station means) over the whole study area, and assigned minimally informative standard normal priors to each element $k$ in the two vectors of regression coefficients. In the absence of any meaningful prior information for the compound parameter $\tau$, I assigned it an improper uniform prior on all positive values, and fixed $\gamma$ - the logit-difference between adult and juvenile survival - to be the difference between the continental average estimates ($logit(0.710) - logit(0.489) = 0.94$).
+
+I fitted the model to a random subset of `r bbs_n_train` presence-absence records from the North American Breeding Bird Survey in 2015 [@sauerNorthAmericanBreeding2011]. I used six environmental covariates in $\mathbf{X}$: percentage cover of deciduous forest, coniferous forest, and mixed forest (to represent breeding habitat for this species), minimum temperature (to capture thermal limits on survival of the species), annual precipitation and mean temperature (as proxies for insect abundance and plant growth, food sources for this species). The forest cover layers were obtained from the maxlike R package [@royleLikelihoodAnalysisSpecies2012], and the environmental layers were bioclim layers 6, 1, and 12 from the WorldClim 2.0 dataset [@fickWorldClimNew1km2017]. In general, ecological knowledge could be used to select separate covariates to use for each of the submodels. However, in the absence of a strong belief that any of these covariates would affect only one vital rate, all six covariates were used in both submodels.
+
+Inference was by Hamiltonian Monte Carlo using the R package greta [@goldingGretaSimpleScalable2019] and its extension package greta.dynamics [@goldingGretaDynamicsModelling2019] for modelling dynamical systems (discussed in *Computation* below). Four chains were run for 1000 iterations each (after 1000 discarded iterations during which the sampler was burnt-in and tuned), which was sufficent to ensure convergence (`r sprintf("$\\hat{R}\\le%s$", format(bbs_max_rhat, digits = 3))`), and yield at least `r round(bbs_neff)` effective samples, for all model parameters. This took `r round(bbs_time)` seconds on a laptop computer. Table 1 reports estimates of these parameters.
+
+```{r bbs_beta, echo = FALSE}
+knitr::kable(bbs_coef_mat, caption = "Posterior means and 95% credible intervals for regression coefficients in the fecundity and survival submodels ($\\beta_F$ and $\\beta_S$). All covariates are standardised, enabling comparison of coefficient estimates as effect sizes.")
+```
+
+The fitted DSDM yields predictions of the probability of presence like those from a correlative SDM (Fig. 2A): predictions from a maximum likelihood logistic regression model fitted to the same data had a correlation of `r bbs_stats$glm_dsdm_correl` with the DSDM predictions, and similar AUC and correlation when compared with the true data in the `r bbs_n_test` survey locations not used to train the model (GLM: AUC = `r bbs_stats$glm_auc`, correlation = `r bbs_stats$glm_pa_correl`, DSDM: AUC = `r bbs_stats$dsdm_auc`, correlation = `r bbs_stats$dsdm_pa_correl`).
 Unlike a correlative SDM, the DSDM also predicts spatial variation in the survival (Fig. 2B) and fecundity (Fig. 2C) rates.
 The species’ range limits (in this case due to the fundamental niche) can be mapped by identifying areas where $\lambda_i \ge 1$, and the model can predict the distribution under reduced fecundity (e.g. due to an introduced competitor) or survival (e.g. due to an introduced pathogen) (Fig. 2D). 
 
-```{r bbs, echo = FALSE, fig.cap = "Spatial predictions from the fitted DSDM. A) Probability of presence predicted by the DSDM, with 2015 BBS presence (black dots) and absence (grey dots) records overlaid. B) Spatial variation in fecundity (juveniles per adult per year). C) Spatial variation in annual adult survival probability. D) The species' range limits (where $\\lambda_i \\ge 1$) under this baseline model (light blue area), a unilateral 50\\% reduction in fecundity (medium pink area overlaid) or in survival (dark green area overlaid). The predictions in panels B, C and D cannot be made using a correlative SDM.", out.width = "\\textwidth"}
+```{r bbs, echo = FALSE, fig.cap = "Spatial predictions from the fitted DSDM. A) Probability of presence predicted by the DSDM, with 2015 BBS presence (black dots) and absence (ringed white dots) records overlaid. B) Spatial variation in fecundity (juveniles per adult per year). C) Spatial variation in annual adult survival probability. D) The species' range limits (where $\\lambda_i \\ge 1$) under this baseline model (light blue area), a unilateral 50\\% reduction in fecundity (medium pink area overlaid) or in survival (dark green area overlaid). The predictions in panels B, C and D cannot be made using a correlative SDM.", out.width = "\\textwidth"}
 knitr::include_graphics("../figures/bbs_fig.png")
 ```
 
@@ -187,13 +242,12 @@ Dispersal can be incorporated in DSDMs by representing an entire metapopulation 
 
 ## Biotic interactions 
 
-Biotic interactionsbetween species can be incorporated in a DSDM by representing the interacting dynamics of multiple species in a single transition matrix, with inter-species density dependence [@fujiwaraCoexistenceCompetingStagestructured2011].
+Biotic interactions between species can be incorporated in a DSDM by representing the interacting dynamics of multiple species in a single transition matrix, with inter-species density dependence [@fujiwaraCoexistenceCompetingStagestructured2011].
 By modelling demographic rates of one species as dependent on the abundance of another species, DSDMs can represent the effects of competition, facilitation, predation and parasitism.
-
 
 # Example 2. A DSDM for *Protea repens*
 
-Whilst the model presented in Example 1 makes predictions of spatial variation in vital rates, and provides estimates of uncertainty those predictions, it we do not have sufficient spatially-varying data.
+Whilst the model presented in Example 1 makes predictions of spatial variation in vital rates, and provides estimates of uncertainty those predictions, there is no spatially-varying information on vital rates with which to test those assumptions for this species. The time and cost required to robustly estimate how a species' vital rates vary with environmental covariates means that such estimates have been produced for relatively few species - one of the motivations for DSDMs. 
 
 
 # Discussion
@@ -214,6 +268,10 @@ However since identifiability will depend on the nature of the data, model, and 
 However, poor identification complicates statistical inference as maximum likelihood methods will be inaccurate and Markov chain Monte Carlo samplers may not converge [@monnahanFasterEstimationBayesian2017].
 This proposal uses two new tools to resolve this issue and fit DSDMs to large datasets: Hamiltonian Monte Carlo & high performance automatic differentiation.
 
+
+
+report posterior correlations for the BBS model
+
 ##  Computation
 
 Hamiltonian Monte Carlo (HMC) is a Markov chain Monte Carlo method that can sample effectively from highly correlated and multi-modal parameter distributions [@monnahanFasterEstimationBayesian2017], but requires gradient calculations.
@@ -225,7 +283,11 @@ Using greta, ecologists can easily build and fit DSDMs on desktop computers or h
 
 
 
+Bayesian inference on the DSDM for the Carolina Chickadee by MCMC took `r round(bbs_time)` seconds on a laptop computer. For this particular model, the computation time can be sped up by using an analytic solution to the transition matrix eigenvalues: $\lambda_i = S_{Ai}(0.94 F_i + 1)$.
+Fitting the analytic version of the model with the same Bayesian inference routine took `r round(bbs_analytic_time)` seconds on the same machine.
+Such convenient and computationally efficient analytic solutions will not be available for all DSDM models however - particularly where matrices are large or encode more complex demography, such as trait-dependent or temporally stochastic vital rates, density dependence, or dispersal. Moreover, deriving analytic solutions for quantities relating to matrix population models is likely to be outside the skill-set of most ecologists, and in any case would force users to focus on model implementation details rather than the ecology of their study species. Consequently, the ability to efficiently analyse large numbers of population transition matrices during each iteration of the inference algorithm is critical to ensuring DSDMs are a practically useful tool for ecologists.
 
+The greta extension package greta.dynamics provides methods for efficiently analysing multiple population transition matrices to determine their intrinsic growth rates and stable stage distributions. The package also enables efficient analysis of dynamic transition matrices, where vital rates and therefor the matrix at each iteration depend on the previous population size or temporally-varying covariates - enabling modelling of density-dependent or temporally stochastic demographics in DSDMs. Whilst dispersal can already be implemented by convolving population transition matrices with a dispersal matrix, future versions of the R package will facilitate more computationally efficient algorithms for accounting for dispersal - leveraging the inherent sparsity in dispersal matrices.
 
 ### Supporting information
 
