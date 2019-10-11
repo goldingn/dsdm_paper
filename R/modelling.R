@@ -17,8 +17,8 @@ surv_covs <- fec_covs <- all_covs <- c("pcMix", "pcDec", "pcCon", "bio1", "bio6"
 
 # calculate survival, given covariates
 get_survival <- function (covs, params) {
-  x_survival <- covs[, surv_covs]
-  survival_logit <- x_survival %*% params$beta_survival + params$default_logit_survival
+  x_survival <- covs[, c("intercept", surv_covs)]
+  survival_logit <- x_survival %*% params$beta_survival
   survival_adult <- ilogit(survival_logit)
   survival_juvenile <- ilogit(survival_logit - params$gamma)
   list(adult = survival_adult,
@@ -26,18 +26,18 @@ get_survival <- function (covs, params) {
 }
 
 get_fecundity <- function (covs, params) {
-  x_fecundity <- covs[, fec_covs]
-  fecundity_log <- x_fecundity %*% params$beta_fecundity + params$default_log_fecundity
+  x_fecundity <- covs[, c("intercept", fec_covs)]
+  fecundity_log <- x_fecundity %*% params$beta_fecundity
   exp(fecundity_log)
 }
 
 get_lambda <- function(survival, fecundity, analytic = FALSE) {
 
   # use either the analytic solution (specific to this simple model) or the
-  # numeric solution (which is more geneeral to DSDMs)
+  # numeric solution (which is more general to DSDMs)
   if (analytic) {
 
-    lambda <- survival$adult * (0.94 * fecundity + 1)
+    lambda <- fecundity * survival$juvenile + survival$adult
 
   } else {
 
@@ -71,20 +71,19 @@ split_data <- function (occ, covs, maps_coords) {
     idx = which(!is.na(getValues(covs[[7]])))
   )
 
-  # scale covs to have zero mean at the average maps location (so intercept can
-  # be defined as a spatial average over maps data) and variance 1 (realtive to )
-  all_vals <- getValues(covs)
-  station_vals <- extract(covs, maps_coords[, c("lon", "lat")])
-  # means <- apply(station_vals, 2, weighted.mean, maps_coords$weight)
-  means <- colMeans(station_vals)
-  diffs <- sweep(all_vals, 2, means, "-")
-  sds <- sqrt(colMeans(diffs ^ 2, na.rm = TRUE))
-  all_vals_scaled <- sweep(diffs, 2, sds, "/")
-  covs <- setValues(covs, all_vals_scaled)
+  # scale covs to have mean 0 and sd 1 over the whole study area. Handle the
+  # prior via an affine transformation beta prior
+  covs <- scale(covs)
 
-  # extract all scaled covariate values, and combine with
+  # get covariate values for maps locations
+  maps_covs <- extract(covs, maps_coords[, c("lon", "lat")])
+  maps_covs <- cbind(intercept = 1, maps_covs)
+
+  # extract all scaled covariate values, add an intercept column, and combine
+  # with occurrence data
   coords <- occ[, c("Longitude", "Latitude")]
   vals <- extract(covs, coords)
+  vals <- cbind(intercept = 1, vals)
   occ <- occ[, -(1:2)]
   all <- cbind(occ, vals)
   all <- na.omit(all)
@@ -97,66 +96,157 @@ split_data <- function (occ, covs, maps_coords) {
     test = all[-train_idx, ],
     all = all,
     covs = covs,
+    maps_covs = maps_covs,
+    maps_weights = maps_coords$weight,
     raster_template = raster_template
   )
 
 }
 
-# estimate the prior for gamma, from the difference between two
-# logit-transformed truncated normal distributions
-est_gamma <- function (n = 1e5) {
-  S_A <- truncdist::rtrunc(n, "norm", 0, 1, 0.71, sqrt(0.03806))
-  S_J <- truncdist::rtrunc(n, "norm", 0, 1, 0.489, sqrt(0.03806))
-  gamma <- qlogis(S_A) - qlogis(S_J)
-  list(mean = mean(gamma),
-       sd = sd(gamma))
+# given the mean and standard deviation of a lognormally-distributed random variable,
+# compute the mean and variance of its log
+lognormal_prior <- function(mean, sd) {
+
+  var <- sd ^ 2
+  list(
+    mean = log((mean ^ 2) / sqrt(var + mean ^ 2)),
+    sd = sqrt(log(1 + var / (mean ^ 2)))
+  )
+
+}
+
+# given the mean and standard deviation of a logitnormally-distributed random variable,
+# compute the mean and variance of its logit (a normal random variable)
+logitnormal_prior <- function(mean, sd) {
+
+  # given the parameters of the distribution, estimate the moments and hence the
+  # mean and variance via the quasi Monte Carlo method listed on wikipedia
+  logitnormal_mean_var <- function (mu, sd, K = 1000) {
+    i <- 1:(K - 1)
+    p <- plogis(qnorm(i/K, mu, sd))
+    m1 <- mean(p)
+    m2 <- mean(p ^ 2)
+    c(mean = m1, variance = m2 - m1 ^ 2)
+  }
+
+  # compute the root mean squared error between the logitnormal mean and
+  # variance from this (transformed) set of parameters, and the observed mean
+  # and variance
+  obj <- function (par, observed) {
+    mu <- par[1]
+    sd <- exp(par[2])
+    expected <- logitnormal_mean_var(mu, sd)
+    mean((expected - observed) ^ 2)
+  }
+
+  # optimise this to find the parameter set that minimised the mean squared error
+  op <- optim(par = c(0, 0), obj, observed = c(mean, sd ^ 2))
+
+  # return the mean and variance on the logit scale
+  list(mean = op$par[1],
+       sd = exp(op$par[2]))
+
+}
+
+# estimate the prior for gamma, from the difference between two normal
+# distributions. this is another normal distribution, with mean mu_A - mu_J, and
+# variance var_A + var_J
+gamma_prior <- function (logit_S_A,
+                         logit_S_J,
+                         n = 1e5) {
+
+  list(mean = logit_S_A$mean - logit_S_J$mean,
+       sd = sqrt(logit_S_A$sd ^ 2 + logit_S_J$sd ^ 2))
+}
+
+# given a vector of prior means and standard deviations for some variables z,
+# where z = X \beta, compute the mean and covariance of a prior over beta that
+# implies this distribution over z.
+beta_prior <- function(X, mean, sd, weights = 1) {
+
+  # use weights to increase variance for each datapoint to spread
+  # prior over multiple datapoints, without adding too much extra data
+
+  # convert the means and sds into MVN parameters
+  n <- nrow(X)
+
+  if (length(mean) == 1) {
+    mean <- rep(mean, n)
+  }
+  if (length(sd) == 1) {
+    sd <- rep(sd, n)
+  }
+
+  var <- sd ^ 2
+  cov <- diag(var)
+
+  # invert X
+  iX <- MASS::ginv(X)
+
+  # solve for beta
+  list(mean = iX %*% mean,
+       Sigma = iX %*% cov %*% t(iX))
+
+}
+
+# greta variables with prior distributions for the regression coefficients for
+# the two submodels, using whitened representation to reduce correlations in the
+# posteriors
+beta_parameter <- function(beta_prior) {
+  L <- t(chol(beta_prior$Sigma))
+  beta_raw <- normal(0, 1, dim = length(beta_prior$mean))
+  beta_prior$mean + L %*% beta_raw
 }
 
 
 build_bbs_model <- function (data_list, analytic = FALSE) {
 
   # data size
-  ncov_fecundity <- length(fec_covs)
-  ncov_survival <- length(surv_covs)
+  ncov_fecundity <- length(fec_covs) + 1
+  ncov_survival <- length(surv_covs) + 1
+
+  # get thee parameters of normally-distributed vital rate priors on the link
+  # scale, based on estimates from Ryu et al.
+  log_fecundity_prior <- lognormal_prior(0.58, 0.25)
+  logit_adult_survival_prior <- logitnormal_prior(0.71, 0.195)
+  logit_juvenile_survival_prior <- logitnormal_prior(0.489, 0.195)
+
+  # compute MVN priors for survival and fecundity betas (including intercept)
+  X_fecundity <- data_list$maps_covs[, c("intercept", fec_covs)]
+  X_survival <- data_list$maps_covs[, c("intercept", surv_covs)]
 
   priors <- list(
-    beta = list(mean = 0, sd = 10),
-    default_survival = list(mean = 0.710, sd = sqrt(0.03806)),
-    default_fecundity = list(mean = 0.58, sd = 0.25),
-    gamma = est_gamma()
+    beta_fecundity = beta_prior(
+      X_fecundity,
+      log_fecundity_prior$mean,
+      log_fecundity_prior$sd,
+      data_list$maps_weights
+    ),
+    beta_survival = beta_prior(
+      X_survival,
+      logit_adult_survival_prior$mean,
+      logit_adult_survival_prior$sd,
+      data_list$maps_weights
+    ),
+    gamma = gamma_prior(
+      logit_adult_survival_prior,
+      logit_juvenile_survival_prior
+    )
   )
 
   # parameters
   params <- list(
-    beta_fecundity = normal(
-      priors$beta$mean,
-      priors$beta$sd,
-      dim = ncov_fecundity
-    ),
-    beta_survival = normal(
-      priors$beta$mean,
-      priors$beta$sd,
-      dim = ncov_survival
-    ),
+    # submodel regression coefficients
+    beta_fecundity = beta_parameter(priors$beta_fecundity),
+    beta_survival = beta_parameter(priors$beta_survival),
     # no prior on the likelihood intercept
     alpha = variable(lower = 0),
-    # uncertainty in the population means for survival and fecundity
-    default_survival = normal(
-      priors$default_survival$mean,
-      priors$default_survival$sd,
-      truncation = c(0, 1)
-      ),
-    default_fecundity = normal(
-      priors$default_fecundity$mean,
-      priors$default_fecundity$sd,
-      truncation = c(0, Inf)),
+    # uncertainty in the logit-difference between adult and juvenile survival
     gamma = normal(
-      priors$default_fecundity$mean,
-      priors$default_fecundity$sd
+      priors$gamma$mean,
+      priors$gamma$sd
     )
   )
-  params$default_logit_survival <- log(params$default_survival / (1 - params$default_survival))
-  params$default_log_fecundity <- log(params$default_fecundity)
   params$likelihood_intercept <- log(params$alpha)
 
   # get all the components
@@ -174,8 +264,7 @@ build_bbs_model <- function (data_list, analytic = FALSE) {
     params$beta_fecundity,
     params$beta_survival,
     params$likelihood_intercept,
-    params$default_log_fecundity,
-    params$default_logit_survival
+    params$gamma
   )
 
   list(
@@ -194,6 +283,7 @@ make_bbs_predictions <- function (model_list, draws_list, data_list) {
   raster_template <- data_list$raster_template
 
   covs_predict <- extract(covs, raster_template$idx)
+  covs_predict <- cbind(intercept = 1, covs_predict)
 
   # get prediction greta arrays
   survival_predict <- get_survival(covs_predict, params)
@@ -406,8 +496,8 @@ compare_bbs_predictions <- function (predictions, data_list) {
   # extract predictions from DSDM
   dsdm_pred <- raster::extract(prob_raster, test_coords)
 
-  # make predictions from GLM
-  glm <- glm(train_pa ~ .,
+  # make predictions from GLM (no intercept as it's in all)
+  glm <- glm(train_pa ~ . -1,
              data = as.data.frame(train_covs),
              family = stats::binomial)
   glm_pred <- predict(glm,
