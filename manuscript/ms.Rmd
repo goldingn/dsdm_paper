@@ -66,7 +66,7 @@ bbs_max_rhat <- max(bbs_max_rhat, 1.01)
 # format parameter estimates
 bbs_means <- bbs_draws_sry$summary$statistics[, "Mean"]
 bbs_cis <- bbs_draws_sry$summary$quantiles[, c("2.5%", "97.5%")]
-bbs_cov_names <- c("intercept", cache$get("all_covs"))
+bbs_cov_names <- colnames(bbs_data$x_train)
 bbs_params <- cbind(data.frame(mean = bbs_means), bbs_cis)
 bbs_params <- bbs_params[seq_len(2 * length(bbs_cov_names)), ]
 
@@ -179,17 +179,18 @@ logit(S_{Ji}) &= logit(S_{Ai}) - \gamma
 where $\mathbf{X}$ is a design matrix of environmental covariates and an intercept dummy variable for the fecundity and survival submodels and $\beta_F$ and $\beta_S$ are vectors of regression coefficients for the two submodels.
 Rather than separately modelling spatial variation in adult and juvenile fecundity, I assume that the environmental predictors of survival are the same in both stages, but that juvenile survival differs from adult survival by a constant amount on the logit scale (to maintain the 0-1 constraints on survival parameters).
 
-I specify an observation model for the presence-absence data in the breeding-bird survey:
+I specify an observation model for presence-absence data:
 
 \begin{align}
 y_i &\sim Bernoulli(p_i) \\ \nonumber
-p_i &= 1 - e^{-\Lambda_i} \\ \nonumber
-\Lambda_i &= \alpha \lambda_i  \\ \nonumber
+p_i &= 1 - e^{-\psi \Lambda_i} \\ \nonumber
+\Lambda_i &= ln(1 + e^{(\lambda_i - 1) M})  \\ \nonumber
 \lambda_i &= eigval(\mathbf{A_i})
 \end{align}
 
-where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the populations at location $i$. Imake a statistically convenient but biologically naive assumption that the size of each population is proportional to its intrinsic growth rate - a relationship that would arise from a constant (not density-dependent) competitive pressure. This simplifying assumption has been made in other spatial population models such as dynamic range models [@pagelForecastingSpeciesRanges2012]. As discussed in the text below, DSDMs can easily incorporate more complex and realistic forms of density-dependence as required.
-The parameter $\alpha$ represents the product of this constant of proportionality with the individual-level detection rate (fraction of individuals in the population detected in this year of the survey). This yields $\Lambda_i$, the expected number of individuals detected during the survey, which gives the probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
+where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the populations at location $i$. From the growth rate, the relative abundance of individuals $\Lambda_i$ is calculated from an expression that combined the carrying capacity expression from the Beverton-Holt model: $K_i = (\lambda_i - 1) M$, where $M$ quantifies how competition limits population sizes, transformed via the softplus function $ln(1 + e^{K_i})$ so that $\Lambda_i$ is positive for all parameter values. The softplus transformation is necessary since the Beverton-Holt expression would otherwise yield zero or negative relative abundances when $\lambda_i <= 1$), and can be thought of a smooth version of the Heaviside function, with $\Lambda_i$ almost identical to $K_i$ for most $lambda_i > 1$.
+This formulation is statistically convenient, but as discussed in the text below, DSDMs can incorporate more complex and realistic forms of density-dependence if required.
+The parameter $\psi$ is an individual-level detection rate so that $\psi \Lambda_i$ gives the expected number of individuals detected during the survey at observation $i$. This leads us to the probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
 
 This model provides a very general DSDM structure for presence-absence data that could be applied to a wide array of species. I refined it for this application by encoding knowledge of the ecology of the Carolina Chickadee in prior distributions over the model parameters:
 
@@ -197,7 +198,8 @@ This model provides a very general DSDM structure for presence-absence data that
 \beta_{F} &\sim N(\mu_F, \mathbf{\Sigma}_F) \\ \nonumber
 \beta_{S} &\sim N(\mu_S, \mathbf{\Sigma}_S) \\ \nonumber
 \gamma &\sim N(1.17, 2.10) \\ \nonumber
-\alpha &\sim U(0, \infty)
+M &\sim U(0, \infty) \\ \nonumber
+\psi &\sim U(0, 1)
 \end{align}.
 
 The spatially-averaged fecundity and adult survival estimates from @ryuDevelopingPopulationModels2016 were used to define priors on regression coefficients for the vital rate submodels. These estimated vital rates correspond to populations at the $J$ survey stations used in the recapture analysis (station names provided in the supplemental data to @ryuDevelopingPopulationModels2016) - locations where the species occurs. I defined a prior on $\beta_F$ and $\beta_S$ such that values were *a priori* more likely if they resulted in estimates of $F_j$ and $S_{Aj}$, for each survey station location $j$, that were more consistent with the estimates in @ryuDevelopingPopulationModels2016.
@@ -205,7 +207,7 @@ First, the means and variances of these estimates were used to calculate equival
 These normally-distributed implied priors correspond exactly to multivariate normal priors on the vectors of regression coefficients, since the matrix-multiplication that maps between regression coefficients and link-scale response is an affine transformation, under which the multivariate normal distribution is closed. The parameters of the priors over $\beta_F$ are therefore given by: $\mu_F = \mathbf{X}_*^{-1}(\text{-}0.63\, \mathbf{I})$ and $\mathbf{\Sigma} = \mathbf{X}_*^{-1} (0.18\,\mathbf{I}) \mathbf{X}_*^{-T}$, where $\mathbf{X}_*$ denotes the design matrix over the $J$ survey stations, $\mathbf{X}_*^{-1}$ its Moore-Penrose pseudoinverse, $\mathbf{X}_*^{-T}$ the transpose of that pseudoinverse, and $\mathbf{I}$ an identity matrix of dimension $J$. The prior parameters $\mu_S$ and $\mathbf{\Sigma}_S$ were defined in the same way using the implied prior parameters over $logit(S_{Aj})$: 1.12, and 1.28.
 Note that these priors do not provide any information on the direction of the relationships between vital rates and environmental covariates (the intercept elements of $\mu_F$ and $\mu_S$ are informed, but the prior mean for the other terms is $\approx 0$), but by providing information on plausible magnitudes of, and correlations between these parameters the prior favours regression equations that pass close to the vital rate estimates at $F_j$ and $S_j$.
 The prior for $\gamma$, the logit-difference between adult and juvenile survival, is given by the difference between the implied normal priors on logit-survival of adults and juveniles, which is also normal.
-In the absence of any meaningful prior information for the compound parameter $\alpha$, I assigned it an improper uniform prior on all positive values.
+In the absence of any meaningful prior information for the competition effect parameter $M$ or the detection rate parameter $\psi$, I assigned the former an improper uniform prior on all positive values, and the latter a uniform prior on the unit interval.
 
 I fitted the model to a random subset of `r bbs_n_train` presence-absence records from the North American Breeding Bird Survey in 2015 [@sauerNorthAmericanBreeding2011]. I used six environmental covariates in $\mathbf{X}$: percentage cover of deciduous forest, coniferous forest, and mixed forest (to represent breeding habitat for this species), minimum temperature (to capture thermal limits on survival of the species), annual precipitation and mean temperature (as proxies for insect abundance and plant growth, food sources for this species). The forest cover layers were obtained from the maxlike R package [@royleLikelihoodAnalysisSpecies2012], and the environmental layers were bioclim layers 6, 1, and 12 from the WorldClim 2.0 dataset [@fickWorldClimNew1km2017]. In general, ecological knowledge could be used to select separate covariates to use for each of the submodels. However, in the absence of a strong belief that any of these covariates would affect only one vital rate, all six covariates were used in both submodels. These covariate values were centred and scaled (before calculation of the priors on $\beta_F$ and $\beta_S$) to enable comparison of regreesion coefficients as effect sizes.
 
