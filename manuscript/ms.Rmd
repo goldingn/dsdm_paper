@@ -82,19 +82,19 @@ mean_text[sig] <- paste0("\\textbf{", mean_text[sig], "}")
 text <- paste(mean_text, ci_text)
 
 name_lookup <- matrix(
-  c("intercept", "intercept",
-    "pcMix", "mixed forest cover",
-    "pcDec", "deciduous forest cover",
-    "pcCon", "coniferous forest cover",
-    "bio1", "annual mean temperature",
-    "bio6", "min temperature of coldest month",
-    "bio12", "annual precipitation"),
+  c("(Intercept)", "Intercept",
+    "pcMix", "Mixed forest cover",
+    "pcDec", "Deciduous forest cover",
+    "pcCon", "Coniferous forest cover",
+    "bio1", "Annual mean temperature",
+    "bio6", "Min. temperature of coldest month",
+    "bio12", "Annual precipitation"),
   ncol = 2, byrow = TRUE
 )
 
 bbs_coef_mat <- matrix(text, ncol = 2)
 rownames(bbs_coef_mat) <- name_lookup[match(bbs_cov_names, name_lookup[, 1]), 2]
-colnames(bbs_coef_mat) <- c("fecundity", "survival")
+colnames(bbs_coef_mat) <- c("fecundity", "adult survival")
 
 # statistics comparing DSDM and GLM
 bbs_stats <- cache$get("bbs_stats")
@@ -222,7 +222,7 @@ The fitted DSDM yields (posterior mean) predictions of the probability of presen
 Unlike a correlative SDM, the DSDM also predicts spatial variation in the survival (Fig. 2B) and fecundity (Fig. 2C) rates.
 The species’ range limits (in this case due to the fundamental niche) can be mapped by identifying areas where $\lambda_i \ge 1$, and the model can predict the distribution under reduced fecundity (e.g. due to an introduced competitor) or survival (e.g. due to an introduced pathogen) (Fig. 2D). 
 
-```{r bbs, echo = FALSE, fig.cap = "Spatial predictions from the fitted DSDM. A) Probability of presence predicted by the DSDM, with 2015 BBS presence (black dots) and absence (ringed white dots) records overlaid. B) Spatial variation in fecundity (juveniles per adult per year). C) Spatial variation in annual adult survival probability. D) The species' range limits (where $\\lambda_i \\ge 1$) under this baseline model (light blue area), a unilateral 50\\% reduction in fecundity (medium pink area overlaid) or in survival (dark green area overlaid). The predictions in panels B, C and D cannot be made using a correlative SDM.", out.width = "\\textwidth"}
+```{r bbs, echo = FALSE, fig.cap = "Spatial predictions from the fitted DSDM. A) Probability of presence predicted by the DSDM, with 2015 BBS presence (black dots) and absence (ringed white dots) records overlaid. B) Spatial variation in annual fecundity. C) Spatial variation in annual adult survival probability. D) The species' range limits (where the posterior probability $\\lambda_i \\ge 1$ exceeds 0.5) under this baseline model (light blue area), a unilateral 50\\% reduction in fecundity (medium pink area overlaid) or a 25\\% reduction in survival (dark green area overlaid). The predictions in panels B, C and D cannot be made using a correlative SDM.", out.width = "\\textwidth"}
 knitr::include_graphics("../figures/bbs_fig.png")
 ```
 

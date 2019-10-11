@@ -318,27 +318,32 @@ make_bbs_predictions <- function (model_list, draws_list, data_list) {
   prob_predict <- get_prob(lambdas_predict, params)
 
   # map posterior mean estimates of these
-  lambda_map <- map_variable(lambdas_predict, draws, raster_template)
   prob_pres_map <- map_variable(prob_predict, draws, raster_template)
   fec_map <- map_variable(fecundity_predict, draws, raster_template)
   surv_map <- map_variable(survival_predict$adult, draws, raster_template)
 
   # decrease survival by 50% across N America
-  survival_predict_low <- lapply(survival_predict, "*", 0.5)
+  survival_predict_low <- lapply(survival_predict, "*", 0.75)
   lambdas_low_surv <- get_lambda(survival_predict_low, fecundity_predict, analytic = TRUE)
-  lambda_low_surv_map <- map_variable(lambdas_low_surv, draws, raster_template)
 
-  # decrease fecundity by 50% across N Americ
+    # decrease fecundity by 50% across N Americ
   lambdas_low_fec <- get_lambda(survival_predict, fecundity_predict * 0.5, analytic = TRUE)
-  lambda_low_fec_map <- map_variable(lambdas_low_fec, draws, raster_template)
+
+  # compute the posterior probability of lambda exceeding 1, then plot
+  in_niche <- lambdas_predict >= 1
+  in_niche_low_surv <- lambdas_low_surv >= 1
+  in_niche_low_fec <- lambdas_low_fec >= 1
+  prob_in_niche_map <- map_variable(in_niche, draws, raster_template)
+  prob_in_niche_low_surv_map <- map_variable(in_niche_low_surv, draws, raster_template)
+  prob_in_niche_low_fec_map <- map_variable(in_niche_low_fec, draws, raster_template)
 
   list(
-    lambda = lambda_map,
+    prob_in_niche = prob_in_niche_map,
     prob_present = prob_pres_map,
     fecundity = fec_map,
     survival = surv_map,
-    lambda_low_survival = lambda_low_surv_map,
-    lambda_low_fecundity = lambda_low_fec_map
+    prob_in_niche_low_survival = prob_in_niche_low_surv_map,
+    prob_in_niche_low_fecundity = prob_in_niche_low_fec_map
   )
 
 }
@@ -346,9 +351,9 @@ make_bbs_predictions <- function (model_list, draws_list, data_list) {
 plot_bbs_maps <- function (predictions, data_list) {
 
   # get range limits
-  predictions$range <- predictions$lambda > 1
-  predictions$low_surv_range <- predictions$lambda_low_survival > 1
-  predictions$low_fec_range <- predictions$lambda_low_fecundity > 1
+  predictions$range <- predictions$prob_in_niche > 0.5
+  predictions$low_surv_range <- predictions$prob_in_niche_low_survival > 0.05
+  predictions$low_fec_range <- predictions$prob_in_niche_low_fecundity > 0.05
 
   # set up plotting colours and scales
   Dark2 <- brewer.pal(3, "Dark2")
@@ -434,7 +439,7 @@ plot_bbs_maps <- function (predictions, data_list) {
        maxpixels = Inf,
        legend.width = legend_width)
 
-  title(main = "survival rate",
+  title(main = "adult survival",
         cex.main = title_cex,
         col.main = title_col,
         line = title_line)
