@@ -183,13 +183,13 @@ I specify an observation model for the presence-absence data in the breeding-bir
 
 \begin{align}
 y_i &\sim Bernoulli(p_i) \\ \nonumber
-p_i &= 1 - e^{-N_i} \\ \nonumber
-N_i &= \alpha \lambda_i  \\ \nonumber
+p_i &= 1 - e^{-\Lambda_i} \\ \nonumber
+\Lambda_i &= \alpha \lambda_i  \\ \nonumber
 \lambda_i &= eigval(\mathbf{A_i})
 \end{align}
 
 where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the populations at location $i$. Imake a statistically convenient but biologically naive assumption that the size of each population is proportional to its intrinsic growth rate - a relationship that would arise from a constant (not density-dependent) competitive pressure. This simplifying assumption has been made in other spatial population models such as dynamic range models [@pagelForecastingSpeciesRanges2012]. As discussed in the text below, DSDMs can easily incorporate more complex and realistic forms of density-dependence as required.
-The parameter $\alpha$ represents the product of this constant of proportionality with the individual-level detection rate (fraction of individuals in the population detected in this year of the survey). This yields $N_i$, the expected number of individuals detected during the survey, which gives the probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
+The parameter $\alpha$ represents the product of this constant of proportionality with the individual-level detection rate (fraction of individuals in the population detected in this year of the survey). This yields $\Lambda_i$, the expected number of individuals detected during the survey, which gives the probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
 
 This model provides a very general DSDM structure for presence-absence data that could be applied to a wide array of species. I refined it for this application by encoding knowledge of the ecology of the Carolina Chickadee in prior distributions over the model parameters:
 
@@ -209,13 +209,14 @@ In the absence of any meaningful prior information for the compound parameter $\
 
 I fitted the model to a random subset of `r bbs_n_train` presence-absence records from the North American Breeding Bird Survey in 2015 [@sauerNorthAmericanBreeding2011]. I used six environmental covariates in $\mathbf{X}$: percentage cover of deciduous forest, coniferous forest, and mixed forest (to represent breeding habitat for this species), minimum temperature (to capture thermal limits on survival of the species), annual precipitation and mean temperature (as proxies for insect abundance and plant growth, food sources for this species). The forest cover layers were obtained from the maxlike R package [@royleLikelihoodAnalysisSpecies2012], and the environmental layers were bioclim layers 6, 1, and 12 from the WorldClim 2.0 dataset [@fickWorldClimNew1km2017]. In general, ecological knowledge could be used to select separate covariates to use for each of the submodels. However, in the absence of a strong belief that any of these covariates would affect only one vital rate, all six covariates were used in both submodels. These covariate values were centred and scaled (before calculation of the priors on $\beta_F$ and $\beta_S$) to enable comparison of regreesion coefficients as effect sizes.
 
-Inference was by Hamiltonian Monte Carlo using the R package greta [@goldingGretaSimpleScalable2019] and its extension package greta.dynamics [@goldingGretaDynamicsModelling2019] for modelling dynamical systems (discussed in *Computation* below). Four chains were run for 1000 iterations each (after 1000 discarded iterations during which the sampler was burnt-in and tuned), which was sufficent to ensure convergence (`r sprintf("$\\hat{R}\\le%s$", format(bbs_max_rhat, digits = 3))`), and yield at least `r round(bbs_neff)` effective samples, for all model parameters. This took `r round(bbs_time)` seconds on a laptop computer. Table 1 reports estamited posterior distributions over these parameters.
+Inference was by Hamiltonian Monte Carlo using the R package greta [@goldingGretaSimpleScalable2019] and its extension package greta.dynamics [@goldingGretaDynamicsModelling2019] for modelling dynamical systems (discussed in *Computation* below). Four chains were run for 1000 iterations each (after 1000 discarded iterations during which the sampler was burnt-in and tuned), which was sufficent to ensure convergence (`r sprintf("$\\hat{R}\\le%s$", format(bbs_max_rhat, digits = 3))`), and yield at least `r round(bbs_neff)` effective samples, for all model parameters. This took `r round(bbs_time)` seconds on a laptop computer. Table 1 reports estimates of the posterior distributions over these parameters.
 
 ```{r bbs_beta, echo = FALSE, cache = FALSE}
 knitr::kable(bbs_coef_mat, align = "r", caption = "Posterior means and 95% credible intervals for regression coefficients in the fecundity and survival submodels ($\\beta_F$ and $\\beta_S$). All covariates are standardised, enabling comparison of coefficient estimates as effect sizes. Posterior means are bolded where credible intervals do not overlap zero.")
 ```
 
-The fitted DSDM yields predictions of the probability of presence like those from a correlative SDM (Fig. 2A): predictions from a maximum likelihood logistic regression model fitted to the same data had a correlation of `r bbs_stats$glm_dsdm_correl` with the DSDM predictions, and similar AUC and correlation when compared with the true data in the `r bbs_n_test` survey locations not used to train the model (GLM: AUC = `r bbs_stats$glm_auc`, correlation = `r bbs_stats$glm_pa_correl`, DSDM: AUC = `r bbs_stats$dsdm_auc`, correlation = `r bbs_stats$dsdm_pa_correl`).
+Prediction of the DSM to new locations proceeds as with any Bayesian model by substituting the design matrix $\mathbf{X}$ for observed data with a design matrix corresponding to the prediction locations, and for each posterior sample of parameter values, calculating the value of the variable of interest. This yields a posterior distribution over predictions that incorporates uncertainty in parameter values. 
+The fitted DSDM yields (posterior mean) predictions of the probability of presence similar to those from a correlative SDM (Fig. 2A): predictions from a maximum likelihood logistic regression model fitted to the same data had a correlation of `r bbs_stats$glm_dsdm_correl` with the DSDM predictions, and similar AUC and correlation when compared with the true data in the `r bbs_n_test` survey locations not used to train the model (GLM: AUC = `r bbs_stats$glm_auc`, correlation = `r bbs_stats$glm_pa_correl`, DSDM: AUC = `r bbs_stats$dsdm_auc`, correlation = `r bbs_stats$dsdm_pa_correl`).
 Unlike a correlative SDM, the DSDM also predicts spatial variation in the survival (Fig. 2B) and fecundity (Fig. 2C) rates.
 The species’ range limits (in this case due to the fundamental niche) can be mapped by identifying areas where $\lambda_i \ge 1$, and the model can predict the distribution under reduced fecundity (e.g. due to an introduced competitor) or survival (e.g. due to an introduced pathogen) (Fig. 2D). 
 
@@ -223,29 +224,65 @@ The species’ range limits (in this case due to the fundamental niche) can be m
 knitr::include_graphics("../figures/bbs_fig.png")
 ```
 
-Note that this model could undoubtedly be improved by including more information of the species ecology and vital rates - for example constraining spatial estimates of fecundity and survival to within a range of plausible values - via prior distributions or changes to model structure. As with any model, the reliability of these vital rate and distribution predictions will depend on the assumptions made and information provided by the modeller. Unlike in purely correlative models however, these assumptions are made clear by explicitly considering spatiall-yvarying vital rates.
+Note that this model could undoubtedly be improved by including more information of the species ecology and vital rates - for example constraining spatial estimates of fecundity and survival to within a range of plausible values - via prior distributions or changes to model structure. As with any model, the reliability of these vital rate and distribution predictions will depend on the assumptions made and information provided by the modeller. Unlike in purely correlative models however, these assumptions are made clear by explicitly considering spatially-varying vital rates.
 
 
-# Extending the basic DSDM
+# Alternative DSDM specifications
 
-Basic DSDMs like the model in Example 1 do not require detailed knowledge of a species population dynamics or the relationship between specific demographic rates and the environment in order to make predictions that are comparable to correlative SDMs.
-Where such information is available (e.g. from studies or expert opinion) it can be incorporated to improve DSDM predictions either via informative priors or by directly incorporating predictions from other models.
+The DSDM structure given in equations 2-3 is the simplest version. It can easily be extend to accommodate alternative data types and demographic processes, and answer a range of ecological questions.
+
+## Alternative observation models
+
+DSDMs explicitly consider the density of individuals at each location through the relative abundance variable $\Lambda_i$. This provides a link to the most commonly used observations for modelling species distributions in ecology.
+An observation model for count data can be specified simply by replacing the bernoulli sampling distribution in equation 3 with an appropriatecount (such as a Poisson or negative binomial distribution) with $\Lambda_i$ as the expected count.
+A model for presence-only data can be formed by considering the data as arising from a Poisson point process with $\Lambda_i$ as the intensity at location $i$ [@rennerPointProcessModels2015]. Integration areas for each observation, and any modelled or prespecified sampling bias can be provided via $\alpha$.
+Similarly, where repeat surveys are available, a model for $\alpha$ can be used to estimate the detection probability as in an occupancy-detection analysis [@mackenzieEstimatingSiteOccupancy2002]. 
+
+# Temporal dynamics
+
+The example DSDM given above is temporally static: the covariate values, vital rate parameters, transition matrix and intrinsic growth rate at each site are assumed to be constant through time.
+Long-term temporal trends driven by changing environmental covariates can be accommodated in this model simply be taking the index $i$ to represent observations at distinct locations *and times*, with the observation vector and design matrix extended accordingly.
+Shorter-term temporal trends and the impacts of environmental stochasticity on species persistence can also be included by using of dynamic (temporally-varying) transition matrices:
+
+\begin{align}
+\Lambda_{t,i} &= \alpha N_{t,i}  \\ \nonumber
+N_{t,i} &= \mathbf{A(\mathbf{X}_{t,i})}N_{t-1,i}
+\end{align}
+
+where the new variable $N_{t,i}$ gives the expected population size at time $t$, which is also used as an index to environmental covariates $\mathbf{X}$ and observations. Rather than the intrisic growth rate computed form the static matrix, this formulation explicitly calculates population size at each time $t$ from the deterministic dynamics that define the matrix population model. In this formulation of the DSDM, the initial population at each site $N_{0,i}$ must be provided. This could either be specified as a parameter in the model, via a known initial population size, or as an arbitrary fixed value accompanied by a sufficient 'burn in' period that parameter estimates are not influenced.
+
+# Continuous stages
+
+Can use IPMs too...
+
 The DSDMs I propose are based on transition matrices (including the matrices used in both MPMs and IPMs), which are well studied in ecology and have been used to study a wide range of plant and animal species with very different life histories [@ellnerIntegralProjectionModels].
-Like other transition matrix approaches, the basic DSDMs I have already developed can also be extended to explicitly model three key ecological processes that are poorly captured by existing distribution models: density dependence, dispersal, and biotic interactions.
 
 ## Density dependence
 
 Density dependence can be represented in DSDMs by modelling demographic rates as a function of the current population state [@ellnerIntegralProjectionModels] (the abundances of each life stage) as well as covariates.
 For example, the current density of individuals could determine fecundity for the next iteration of the dynamics. The matrix iterations will then converge to a stable state; the population carrying capacity or the expected abundance.
 
+ add notation for A(N_t)
+ note that this can be combined with Eq 5, or can be iterated for a sufficient number of timesteps (T) to get a temporally-static density-dependent model. In practice, T can be determined adaptively, iterating a sufficient number of times for N_i to converge and then terminating.
+
 ## Dispersal
 
 Dispersal can be incorporated in DSDMs by representing an entire metapopulation in a single sparse, block-structured transition matrix, with dispersal represented by transition probabilities between states in different patches [@neubertDEMOGRAPHYDISPERSALCALCULATION2000].
+
+Two approaches (with equation)
+- for models using the eigenvalue convolve A with a dispersal matrix D (using a mask for dispersing stages)
+- or for density-dependent or temporally dynamic models interleave dispersal and reproduction stages
+note that in practice we would compute the eigenvalue by iteration for computational convenience.
+
+Note that the initial populations can be specified in only some patches to represent dispersal limitation. For example in the CaCh example setting zero initial population in the pacific north west - where there is a patch of apparently suitable habitat but where the species does not exist (presumably due to dispersal limitation).
 
 ## Biotic interactions 
 
 Biotic interactions between species can be incorporated in a DSDM by representing the interacting dynamics of multiple species in a single transition matrix, with inter-species density dependence [@fujiwaraCoexistenceCompetingStagestructured2011].
 By modelling demographic rates of one species as dependent on the abundance of another species, DSDMs can represent the effects of competition, facilitation, predation and parasitism.
+
+add example matrix structure as an equation
+
 
 # Example 2. A DSDM for *Protea repens*
 
@@ -253,6 +290,16 @@ Whilst the model presented in Example 1 makes predictions of spatial variation i
 
 
 # Discussion
+
+
+# Prior specification
+
+Basic DSDMs like the model in Example 1 do not require detailed knowledge of a species population dynamics or the relationship between specific demographic rates and the environment in order to make predictions that are comparable to correlative SDMs.
+Where such information is available (e.g. from studies or expert opinion) it can be incorporated to improve DSDM predictions either via informative priors or by directly incorporating predictions from other models.
+
+Determining the most common and useful types of prior information, and coming up with straightforward strategies to incorporate them is an area for future research.
+
+The affine transformation provided in example 1 is one approach. An integrated likelihood is another option - the analysis of recapture data to inform vital rates at specific sites could be performed simultaneously with estimation of the DSDM...
 
 
 
