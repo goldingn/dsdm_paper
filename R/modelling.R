@@ -56,30 +56,21 @@ get_lambda <- function(survival, fecundity, analytic = FALSE) {
 
 }
 
-# carrying capacity under the Ricker model
-ricker_k <- function (lambda, M) {
-  lambda / M
-}
-
-# carrying capacity under the Beverton-Holt model
-bh_k <- function (lambda, M) {
-  (lambda - 1) * M
-}
-
 # calculate the carrying capacity from lambda and scaling parameters, rectified
 # to always be positive (and differentiable)
-carrying_capacity <- function (lambda, params) {
-  log1pe(bh_k(lambda, params$M))
-}
 
 # probability of observed occupancy from growth rate and ancillary parameters
 get_prob <- function (lambda, params) {
 
-  # relative abundance at each site
-  Lambda <- carrying_capacity(lambda, params)
+  # (relative) Beverton-Holt theoretical carrying capacity (Ricker would be
+  # lambda * alpha)
+  K <- (lambda - 1) * params$alpha
 
-  # corresponding probability of detection
-  icloglog(log(params$psi) + log(Lambda))
+  # rectify to positive relative abundance for all values
+  Lambda <- log1pe(K)
+
+  # probability of detection under Poisson sampling
+  1 - exp(-Lambda)
 
 }
 
@@ -267,10 +258,8 @@ build_bbs_model <- function (data_list, analytic = FALSE) {
     # submodel regression coefficients
     beta_fecundity = beta_parameter(priors$beta_fecundity),
     beta_survival = beta_parameter(priors$beta_survival),
-    # no prior on the competition effect of the Beverton holt model
-    M = variable(lower = 0),
-    # uniform prior on the detection probabilities
-    psi = uniform(0, 1),
+    # no prior on the combined detection/competition effect
+    alpha = variable(lower = 0),
     # uncertainty in the logit-difference between adult and juvenile survival
     gamma = normal(
       priors$gamma$mean,
@@ -292,8 +281,7 @@ build_bbs_model <- function (data_list, analytic = FALSE) {
   m <- model(
     params$beta_fecundity,
     params$beta_survival,
-    params$psi,
-    params$M,
+    params$alpha,
     params$gamma
   )
 

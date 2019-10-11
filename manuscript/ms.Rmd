@@ -163,7 +163,7 @@ The spatially static matrix population model from this previous analysis was def
 \mathbf{A} = \begin{pmatrix} F \cdot S_J & F \cdot S_A \\ S_J & S_A \end{pmatrix}
 \end{align}
 
-where and $F$, $S_J$, and $S_A$ are single spatial estiamtes of annual fecundity, juvenile survival, and adult survival rates respectively.
+where and $F$, $S_J$, and $S_A$ are estimates of annual fecundity, juvenile survival, and adult survival rates respectively for the entire North American population of the species.
 Tables 2-4 in @ryuDevelopingPopulationModels2016 give the following parameter estimates, along with estimates of variability expressed here as standard deviations: $F$ = 0.58 ($\pm$ 0.25), $S_J$ = 0.49 ($\pm$ 0.20), $S_A$ = 0.71 ($\pm$ 0.20).
 
 Whilst these estimates provide detailed information with which to predict population trajectories for the US as a whole, they do not provide any information about how vital rates vary across the continent, and so don't help us to predict the species' distribution.
@@ -183,23 +183,23 @@ I specify an observation model for presence-absence data:
 
 \begin{align}
 y_i &\sim Bernoulli(p_i) \\ \nonumber
-p_i &= 1 - e^{-\psi \Lambda_i} \\ \nonumber
-\Lambda_i &= ln(1 + e^{(\lambda_i - 1) M})  \\ \nonumber
+p_i &= 1 - e^{-\Lambda_i} \\ \nonumber
+\Lambda_i &= ln(1 + e^{K_i})  \\ \nonumber
+K_i &= (\lambda_i - 1) \alpha \\ \nonumber
 \lambda_i &= eigval(\mathbf{A_i})
 \end{align}
 
-where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the populations at location $i$. From the growth rate, the relative abundance of individuals $\Lambda_i$ is calculated from an expression that combined the carrying capacity expression from the Beverton-Holt model: $K_i = (\lambda_i - 1) M$, where $M$ quantifies how competition limits population sizes, transformed via the softplus function $ln(1 + e^{K_i})$ so that $\Lambda_i$ is positive for all parameter values. The softplus transformation is necessary since the Beverton-Holt expression would otherwise yield zero or negative relative abundances when $\lambda_i <= 1$), and can be thought of a smooth version of the Heaviside function, with $\Lambda_i$ almost identical to $K_i$ for most $lambda_i > 1$.
-This formulation is statistically convenient, but as discussed in the text below, DSDMs can incorporate more complex and realistic forms of density-dependence if required.
-The parameter $\psi$ is an individual-level detection rate so that $\psi \Lambda_i$ gives the expected number of individuals detected during the survey at observation $i$. This leads us to the probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
+where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the populations at location $i$. The theoretical carrying capacity at each site $K_i$ is computed from the carrying capacity relationship of the Beverton-Holt model. $K_i$ has negative values $\lambda_i < 1$, so it is transformed to an always-positive relative abundance parameter $\Lambda_i$ via the softplus function. The softplus transformation is a smooth version of the Heaviside function (which sets negative values to zero), so $\Lambda_i$ almost identical to $K_i$ for most $lambda_i > 1$, rapidly approaches zero below $lambda_i = 1$. This formulation is statistically convenient, but as discussed in the text below, DSDMs can incorporate more complex and realistic forms of density-dependence if required. 
+The parameter $\alpha$ controls the relationship between the intrinsic population growth rate and relative abundance. It is a compound of two parameters that are only identified together: the Beverton-Holt density-dependence parameter relating growth rates to carrying capacities; and the detection rate - the fraction of individuals in the total population that are detected during a presence-absence survey at site $i$.  
+From $\Lambda_i$, we obtain the probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
 
-This model provides a very general DSDM structure for presence-absence data that could be applied to a wide array of species. I refined it for this application by encoding knowledge of the ecology of the Carolina Chickadee in prior distributions over the model parameters:
+This model provides a general DSDM structure for presence-absence data that is applicable to a range species. I refined it for this application by encoding knowledge of the ecology of the Carolina Chickadee in prior distributions over the model parameters:
 
 \begin{align}
 \beta_{F} &\sim N(\mu_F, \mathbf{\Sigma}_F) \\ \nonumber
 \beta_{S} &\sim N(\mu_S, \mathbf{\Sigma}_S) \\ \nonumber
 \gamma &\sim N(1.17, 2.10) \\ \nonumber
-M &\sim U(0, \infty) \\ \nonumber
-\psi &\sim U(0, 1)
+alpha &\sim U(0, \infty)
 \end{align}.
 
 The spatially-averaged fecundity and adult survival estimates from @ryuDevelopingPopulationModels2016 were used to define priors on regression coefficients for the vital rate submodels. These estimated vital rates correspond to populations at the $J$ survey stations used in the recapture analysis (station names provided in the supplemental data to @ryuDevelopingPopulationModels2016) - locations where the species occurs. I defined a prior on $\beta_F$ and $\beta_S$ such that values were *a priori* more likely if they resulted in estimates of $F_j$ and $S_{Aj}$, for each survey station location $j$, that were more consistent with the estimates in @ryuDevelopingPopulationModels2016.
@@ -207,17 +207,17 @@ First, the means and variances of these estimates were used to calculate equival
 These normally-distributed implied priors correspond exactly to multivariate normal priors on the vectors of regression coefficients, since the matrix-multiplication that maps between regression coefficients and link-scale response is an affine transformation, under which the multivariate normal distribution is closed. The parameters of the priors over $\beta_F$ are therefore given by: $\mu_F = \mathbf{X}_*^{-1}(\text{-}0.63\, \mathbf{I})$ and $\mathbf{\Sigma} = \mathbf{X}_*^{-1} (0.18\,\mathbf{I}) \mathbf{X}_*^{-T}$, where $\mathbf{X}_*$ denotes the design matrix over the $J$ survey stations, $\mathbf{X}_*^{-1}$ its Moore-Penrose pseudoinverse, $\mathbf{X}_*^{-T}$ the transpose of that pseudoinverse, and $\mathbf{I}$ an identity matrix of dimension $J$. The prior parameters $\mu_S$ and $\mathbf{\Sigma}_S$ were defined in the same way using the implied prior parameters over $logit(S_{Aj})$: 1.12, and 1.28.
 Note that these priors do not provide any information on the direction of the relationships between vital rates and environmental covariates (the intercept elements of $\mu_F$ and $\mu_S$ are informed, but the prior mean for the other terms is $\approx 0$), but by providing information on plausible magnitudes of, and correlations between these parameters the prior favours regression equations that pass close to the vital rate estimates at $F_j$ and $S_j$.
 The prior for $\gamma$, the logit-difference between adult and juvenile survival, is given by the difference between the implied normal priors on logit-survival of adults and juveniles, which is also normal.
-In the absence of any meaningful prior information for the competition effect parameter $M$ or the detection rate parameter $\psi$, I assigned the former an improper uniform prior on all positive values, and the latter a uniform prior on the unit interval.
+In the absence of any meaningful prior information for the competition effects or detection rates, I assigned $\alpha$ an improper uniform prior on all positive values.
 
-I fitted the model to a random subset of `r bbs_n_train` presence-absence records from the North American Breeding Bird Survey in 2015 [@sauerNorthAmericanBreeding2011]. I used six environmental covariates in $\mathbf{X}$: percentage cover of deciduous forest, coniferous forest, and mixed forest (to represent breeding habitat for this species), minimum temperature (to capture thermal limits on survival of the species), annual precipitation and mean temperature (as proxies for insect abundance and plant growth, food sources for this species). The forest cover layers were obtained from the maxlike R package [@royleLikelihoodAnalysisSpecies2012], and the environmental layers were bioclim layers 6, 1, and 12 from the WorldClim 2.0 dataset [@fickWorldClimNew1km2017]. In general, ecological knowledge could be used to select separate covariates to use for each of the submodels. However, in the absence of a strong belief that any of these covariates would affect only one vital rate, all six covariates were used in both submodels. These covariate values were centred and scaled (before calculation of the priors on $\beta_F$ and $\beta_S$) to enable comparison of regreesion coefficients as effect sizes.
+I fitted the model to a random subset of `r bbs_n_train` presence-absence records from the North American Breeding Bird Survey in 2015 [@sauerNorthAmericanBreeding2011]. I used six environmental covariates in $\mathbf{X}$: percentage cover of deciduous forest, coniferous forest, and mixed forest (to represent breeding habitat for this species), minimum temperature (to capture thermal limits on survival of the species), annual precipitation and mean temperature (as proxies for insect abundance and plant growth, food sources for this species). The forest cover layers were obtained from the maxlike R package [@royleLikelihoodAnalysisSpecies2012], and the climatic covariates were bioclim layers 6, 1, and 12 from the WorldClim 2.0 dataset [@fickWorldClimNew1km2017]. In general, ecological knowledge could be used to select separate covariates to use for each of the submodels. However, in the absence of a strong belief that any of these covariates would affect only one vital rate, all six covariates were used in both submodels. These covariate values were centred and scaled (before calculation of the priors on $\beta_F$ and $\beta_S$) to enable comparison of regreesion coefficients as effect sizes.
 
-Inference was by Hamiltonian Monte Carlo using the R package greta [@goldingGretaSimpleScalable2019] and its extension package greta.dynamics [@goldingGretaDynamicsModelling2019] for modelling dynamical systems (discussed in *Computation* below). Four chains were run for 1000 iterations each (after 1000 discarded iterations during which the sampler was burnt-in and tuned), which was sufficent to ensure convergence (`r sprintf("$\\hat{R}\\le%s$", format(bbs_max_rhat, digits = 3))`), and yield at least `r round(bbs_neff)` effective samples, for all model parameters. This took `r round(bbs_time)` seconds on a laptop computer. Table 1 reports estimates of the posterior distributions over these parameters.
+Inference was by Hamiltonian Monte Carlo using the R package greta [@goldingGretaSimpleScalable2019] and its extension package greta.dynamics [@goldingGretaDynamicsModelling2019] for modelling dynamical systems (discussed in *Computation* below). Four chains were run for 1000 iterations each (after 1000 discarded iterations during which the sampler was burnt-in and tuned), which was sufficent to ensure convergence (`r sprintf("$\\hat{R}\\le%s$", format(bbs_max_rhat, digits = 3))`), and yield at least `r round(bbs_neff)` effective samples for every model parameter. This took `r round(bbs_time)` seconds on a laptop computer. Table 1 reports estimates of the posterior distributions over these parameters.
 
 ```{r bbs_beta, echo = FALSE, cache = FALSE}
 knitr::kable(bbs_coef_mat, align = "r", caption = "Posterior means and 95% credible intervals for regression coefficients in the fecundity and survival submodels ($\\beta_F$ and $\\beta_S$). All covariates are standardised, enabling comparison of coefficient estimates as effect sizes. Posterior means are bolded where credible intervals do not overlap zero.")
 ```
 
-Prediction of the DSM to new locations proceeds as with any Bayesian model by substituting the design matrix $\mathbf{X}$ for observed data with a design matrix corresponding to the prediction locations, and for each posterior sample of parameter values, calculating the value of the variable of interest. This yields a posterior distribution over predictions that incorporates uncertainty in parameter values. 
+Prediction of the DSDM to new locations proceeds as with any Bayesian model by substituting the design matrix $\mathbf{X}$ for observed data with a design matrix corresponding to the prediction locations, and for each posterior sample of parameter values, calculating the value of the variable of interest. This yields a posterior distribution over predictions that incorporates uncertainty in parameter values. 
 The fitted DSDM yields (posterior mean) predictions of the probability of presence similar to those from a correlative SDM (Fig. 2A): predictions from a maximum likelihood logistic regression model fitted to the same data had a correlation of `r bbs_stats$glm_dsdm_correl` with the DSDM predictions, and similar AUC and correlation when compared with the true data in the `r bbs_n_test` survey locations not used to train the model (GLM: AUC = `r bbs_stats$glm_auc`, correlation = `r bbs_stats$glm_pa_correl`, DSDM: AUC = `r bbs_stats$dsdm_auc`, correlation = `r bbs_stats$dsdm_pa_correl`).
 Unlike a correlative SDM, the DSDM also predicts spatial variation in the survival (Fig. 2B) and fecundity (Fig. 2C) rates.
 The species’ range limits (in this case due to the fundamental niche) can be mapped by identifying areas where $\lambda_i \ge 1$, and the model can predict the distribution under reduced fecundity (e.g. due to an introduced competitor) or survival (e.g. due to an introduced pathogen) (Fig. 2D). 
@@ -231,27 +231,29 @@ Note that this model could undoubtedly be improved by including more information
 
 # Alternative DSDM specifications
 
-The DSDM structure given in equations 2-3 is the simplest version. It can easily be extend to accommodate alternative data types and demographic processes, and answer a range of ecological questions.
+The DSDM structure given in equations 2-3 is the simplest version.
+It can easily be extend to accommodate alternative data types and demographic processes, and answer a range of ecological questions. Whilst statistical inference against distribution data could be performed on almost any demographic model, I restrict the models discussed here to those that are amenable to efficient MCMC methods. Specifically, models with likelihoods that are analytically tractable, and can be differentiated with respect to parameter values. This enables the use of modern gradient-based MCMC samplers [@monnahanFasterEstimationBayesian2017], thought it necessarily restricts the scope of these models to those with only continuous parameters. The model variations I propose below encompass a wide range of features whist remaining within these constraints, and can also make use of efficient vectorised and linear algebra routines, meaning that should scale well to large datasets.
 
 ## Alternative observation models
 
 DSDMs explicitly consider the density of individuals at each location through the relative abundance variable $\Lambda_i$. This provides a link to the most commonly used observations for modelling species distributions in ecology.
-An observation model for count data can be specified simply by replacing the bernoulli sampling distribution in equation 3 with an appropriatecount (such as a Poisson or negative binomial distribution) with $\Lambda_i$ as the expected count.
+An observation model for count data can be specified simply by replacing the bernoulli sampling distribution in equation 3 with an appropriate count (such as a Poisson or negative binomial distribution) with $\Lambda_i$ as the expected count.
 A model for presence-only data can be formed by considering the data as arising from a Poisson point process with $\Lambda_i$ as the intensity at location $i$ [@rennerPointProcessModels2015]. Integration areas for each observation, and any modelled or prespecified sampling bias can be provided via $\alpha$.
 Similarly, where repeat surveys are available, a model for $\alpha$ can be used to estimate the detection probability as in an occupancy-detection analysis [@mackenzieEstimatingSiteOccupancy2002]. 
 
 # Temporal dynamics
 
 The example DSDM given above is temporally static: the covariate values, vital rate parameters, transition matrix and intrinsic growth rate at each site are assumed to be constant through time.
-Long-term temporal trends driven by changing environmental covariates can be accommodated in this model simply be taking the index $i$ to represent observations at distinct locations *and times*, with the observation vector and design matrix extended accordingly.
-Shorter-term temporal trends and the impacts of environmental stochasticity on species persistence can also be included by using of dynamic (temporally-varying) transition matrices:
+Long-term temporal trends driven by changing environmental covariates can be accommodated in this model simply by considering each time point $t$ as an independent set of observations, such that each set of environmaental conditions $\mathbf{X}_{i,t}$ results in a separate transition matrix $\mathbf{A}_{i,t}$ and corresponds to observed responses $y_{i,t}$. This approach assumes the time periods are sufficiently far apart that the populations have returned to the carrying capacity implied by the contemporary environmental conditions.
+
+With shorter temporal intervals, the impacts of environmental stochasticity on population sizes can be included by explicitly iterating populations through the succession of transition matrices at times $t$:
 
 \begin{align}
-\Lambda_{t,i} &= \alpha N_{t,i}  \\ \nonumber
-N_{t,i} &= \mathbf{A(\mathbf{X}_{t,i})}N_{t-1,i}
+\Lambda_{i,t} &= \alpha N_{i,t}  \\ \nonumber
+N_{i,t} &= \mathbf{A}_{i,t}N_{i,t-1}
 \end{align}
 
-where the new variable $N_{t,i}$ gives the expected population size at time $t$, which is also used as an index to environmental covariates $\mathbf{X}$ and observations. Rather than the intrisic growth rate computed form the static matrix, this formulation explicitly calculates population size at each time $t$ from the deterministic dynamics that define the matrix population model. In this formulation of the DSDM, the initial population at each site $N_{0,i}$ must be provided. This could either be specified as a parameter in the model, via a known initial population size, or as an arbitrary fixed value accompanied by a sufficient 'burn in' period that parameter estimates are not influenced.
+where the new variable $N_{t,i}$ gives the expected population size at time $t$. In this formulation of the DSDM, the initial population at each site $N_{0,i}$ must be provided. This could either be specified as a parameter in the model, via a known initial population size, or as an arbitrary fixed value accompanied by a sufficient 'burn in' period that parameter estimates are not influenced.
 
 # Continuous stages
 
@@ -262,9 +264,15 @@ The DSDMs I propose are based on transition matrices (including the matrices use
 ## Density dependence
 
 Density dependence can be represented in DSDMs by modelling demographic rates as a function of the current population state [@ellnerIntegralProjectionModels] (the abundances of each life stage) as well as covariates.
-For example, the current density of individuals could determine fecundity for the next iteration of the dynamics. The matrix iterations will then converge to a stable state; the population carrying capacity or the expected abundance.
+For example, the current density of individuals could determine fecundity for the next iteration of the dynamics. The matrix iterations will then converge to a stable state; the population carrying capacity or the expected abundance. this cna be achieved by iterating populations a sufficient number of time $K$ for the populations to converge on stable population sizes.
 
- add notation for A(N_t)
+\begin{align}
+\Lambda_{i} &= \alpha N_{i,K}  \\ \nonumber
+N_{i,K} &= \mathbf{A}(N_{i,k-1})N_{i,k-1}
+\end{align}
+
+
+for iteration $k$ in $K$.
  note that this can be combined with Eq 5, or can be iterated for a sufficient number of timesteps (T) to get a temporally-static density-dependent model. In practice, T can be determined adaptively, iterating a sufficient number of times for N_i to converge and then terminating.
 
 ## Dispersal
@@ -332,6 +340,8 @@ Google’s recently released open source, high performance AD software TensorFlo
 I have combined HMC with TensorFlow in an R package greta [@goldingGretaSimpleScalable2019] for flexible specification of and sampling from statistical models in R.
 Using greta, ecologists can easily build and fit DSDMs on desktop computers or high-performance compute clusters.
 
+
+Include an appendix with notation and greta code for all of the model variants described above
 
 
 Bayesian inference on the DSDM for the Carolina Chickadee by MCMC took `r round(bbs_time)` seconds on a laptop computer. For this particular model, the computation time can be sped up by using an analytic solution to the transition matrix eigenvalues: $\lambda_i = F_i S_{Ji} + S_{Ai}$.
