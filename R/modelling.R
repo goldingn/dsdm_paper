@@ -16,18 +16,16 @@ map_variable <- function (greta_array, draws, raster_template) {
 surv_covs <- fec_covs <- all_covs <- c("pcMix", "pcDec", "pcCon", "bio1", "bio6", "bio12")
 
 # calculate survival, given covariates
-get_survival <- function (covs, params) {
-  x_survival <- covs[, c("intercept", surv_covs)]
-  survival_logit <- x_survival %*% params$beta_survival
+get_survival <- function (X, params) {
+  survival_logit <- X %*% params$beta_survival
   survival_adult <- ilogit(survival_logit)
   survival_juvenile <- ilogit(survival_logit - params$gamma)
   list(adult = survival_adult,
        juvenile = survival_juvenile)
 }
 
-get_fecundity <- function (covs, params) {
-  x_fecundity <- covs[, c("intercept", fec_covs)]
-  fecundity_log <- x_fecundity %*% params$beta_fecundity
+get_fecundity <- function (X, params) {
+  fecundity_log <- X %*% params$beta_fecundity
   exp(fecundity_log)
 }
 
@@ -62,10 +60,15 @@ get_prob <- function (lambdas, params) {
   icloglog(params$likelihood_intercept + log(lambdas))
 }
 
-# randomly split data into training and test datasets, and compute other useful data things
-split_data <- function (occ, covs, maps_coords) {
+get_design_matrix <- function(formula, vals) {
+  vals_df <- as.data.frame(vals)
+  model.matrix(formula, vals_df)
+}
 
-  # covariates for all pixels
+# randomly split data into training and test datasets, and compute other useful data things
+prep_data <- function (formula, occ, covs, maps_coords) {
+
+  # template raster with minimal mask and index to cells with values
   raster_template <- list(
     raster = covs[[7]] * 0,
     idx = which(!is.na(getValues(covs[[7]])))
@@ -76,28 +79,39 @@ split_data <- function (occ, covs, maps_coords) {
   covs <- scale(covs)
 
   # get covariate values for maps locations
-  maps_covs <- extract(covs, maps_coords[, c("lon", "lat")])
-  maps_covs <- cbind(intercept = 1, maps_covs)
+  maps_vals <- extract(covs, maps_coords[, c("lon", "lat")])
+  x_maps <- get_design_matrix(formula, maps_vals)
 
-  # extract all scaled covariate values, add an intercept column, and combine
-  # with occurrence data
+  # for all pixel locations
+  all_vals <- extract(covs, raster_template$idx)
+  x_predict <- get_design_matrix(formula, all_vals)
+
+  # and for all BBS locations
   coords <- occ[, c("Longitude", "Latitude")]
-  vals <- extract(covs, coords)
-  vals <- cbind(intercept = 1, vals)
-  occ <- occ[, -(1:2)]
-  all <- cbind(occ, vals)
+  bbs_vals <- extract(covs, coords)
+  x_bbs <- get_design_matrix(formula, bbs_vals)
+
+  # combine, drop NAs, then split again
+  all <- cbind(occ[, -(1:2)], x_bbs)
   all <- na.omit(all)
+
+  pa <- all$PA
+  coords <- all[, c("Longitude", "Latitude")]
+  x_bbs <- all[, colnames(x_bbs)]
 
   # subset, remove a text column, and convert to a matrix
   train_idx <- sample.int(nrow(all), 500)
 
   list(
-    train = all[train_idx, ],
-    test = all[-train_idx, ],
-    all = all,
+    x_train = x_bbs[train_idx, ],
+    x_test = x_bbs[-train_idx, ],
+    pa_train = pa[train_idx],
+    pa_test = pa[-train_idx],
+    coords_train = coords[train_idx, ],
+    coords_test = coords[-train_idx, ],
     covs = covs,
-    maps_covs = maps_covs,
-    maps_weights = maps_coords$weight,
+    x_maps = x_maps,
+    x_predict = x_predict,
     raster_template = raster_template
   )
 
@@ -162,7 +176,7 @@ gamma_prior <- function (logit_S_A,
 # given a vector of prior means and standard deviations for some variables z,
 # where z = X \beta, compute the mean and covariance of a prior over beta that
 # implies this distribution over z.
-beta_prior <- function(X, mean, sd, weights = 1) {
+beta_prior <- function(X, mean, sd) {
 
   # use weights to increase variance for each datapoint to spread
   # prior over multiple datapoints, without adding too much extra data
@@ -201,10 +215,6 @@ beta_parameter <- function(beta_prior) {
 
 build_bbs_model <- function (data_list, analytic = FALSE) {
 
-  # data size
-  ncov_fecundity <- length(fec_covs) + 1
-  ncov_survival <- length(surv_covs) + 1
-
   # get thee parameters of normally-distributed vital rate priors on the link
   # scale, based on estimates from Ryu et al.
   log_fecundity_prior <- lognormal_prior(0.58, 0.25)
@@ -212,21 +222,16 @@ build_bbs_model <- function (data_list, analytic = FALSE) {
   logit_juvenile_survival_prior <- logitnormal_prior(0.489, 0.195)
 
   # compute MVN priors for survival and fecundity betas (including intercept)
-  X_fecundity <- data_list$maps_covs[, c("intercept", fec_covs)]
-  X_survival <- data_list$maps_covs[, c("intercept", surv_covs)]
-
   priors <- list(
     beta_fecundity = beta_prior(
-      X_fecundity,
+      data_list$x_maps,
       log_fecundity_prior$mean,
-      log_fecundity_prior$sd,
-      data_list$maps_weights
+      log_fecundity_prior$sd
     ),
     beta_survival = beta_prior(
-      X_survival,
+      data_list$x_maps,
       logit_adult_survival_prior$mean,
-      logit_adult_survival_prior$sd,
-      data_list$maps_weights
+      logit_adult_survival_prior$sd
     ),
     gamma = gamma_prior(
       logit_adult_survival_prior,
@@ -250,13 +255,13 @@ build_bbs_model <- function (data_list, analytic = FALSE) {
   params$likelihood_intercept <- log(params$alpha)
 
   # get all the components
-  survival <- get_survival(data_list$train, params)
-  fecundity <- get_fecundity(data_list$train, params)
+  survival <- get_survival(data_list$x_train, params)
+  fecundity <- get_fecundity(data_list$x_train, params)
   lambdas <- get_lambda(survival, fecundity, analytic = analytic)
   prob <- get_prob(lambdas, params)
 
   # likelihood for presence-absence data
-  presence <- data_list$train$PA
+  presence <- data_list$pa_train
   distribution(presence) <- bernoulli(prob)
 
   # fit the model
@@ -279,15 +284,11 @@ make_bbs_predictions <- function (model_list, draws_list, data_list) {
 
   params <- model_list$params
   draws <- draws_list$draws
-  covs <- data_list$covs
   raster_template <- data_list$raster_template
 
-  covs_predict <- extract(covs, raster_template$idx)
-  covs_predict <- cbind(intercept = 1, covs_predict)
-
   # get prediction greta arrays
-  survival_predict <- get_survival(covs_predict, params)
-  fecundity_predict <- get_fecundity(covs_predict, params)
+  survival_predict <- get_survival(data_list$x_predict, params)
+  fecundity_predict <- get_fecundity(data_list$x_predict, params)
   lambdas_predict <- get_lambda(survival_predict, fecundity_predict, analytic = TRUE)
   prob_predict <- get_prob(lambdas_predict, params)
 
@@ -318,8 +319,6 @@ make_bbs_predictions <- function (model_list, draws_list, data_list) {
 }
 
 plot_bbs_maps <- function (predictions, data_list) {
-
-  dat <- data_list$train
 
   # get range limits
   predictions$range <- predictions$lambda > 1
@@ -362,14 +361,14 @@ plot_bbs_maps <- function (predictions, data_list) {
        legend.width = legend_width,
        maxpixels = Inf)
 
-  points(dat[, c("Longitude", "Latitude")],
+  points(data_list$coords_train,
          pch = 21,
          cex = 0.7,
          bg = "white",
          lwd = 4,
          col = grey(0.4))
 
-  points(dat[dat[, "PA"] == 1, c("Longitude", "Latitude")],
+  points(data_list$coords_train[data_list$pa_train == 1, ],
          pch = 16,
          cex = 0.7,
          col = "black")
@@ -484,34 +483,23 @@ compare_bbs_predictions <- function (predictions, data_list) {
 
   prob_raster <- predictions$prob_present
 
-  train <- data_list$train
-  train_pa <- train$PA
-  train_covs <- train[, all_covs]
-
-  test <- data_list$test
-  test_coords <- test[, c("Longitude", "Latitude")]
-  test_pa <- test$PA
-  test_covs <- test[, all_covs]
-
   # extract predictions from DSDM
-  dsdm_pred <- raster::extract(prob_raster, test_coords)
+  dsdm_pred <- raster::extract(prob_raster, data_list$coords_test)
 
   # make predictions from GLM (no intercept as it's in all)
-  glm <- glm(train_pa ~ . -1,
-             data = as.data.frame(train_covs),
+  glm <- glm(data_list$pa_train ~ . -1,
+             data = as.data.frame(data_list$x_train),
              family = stats::binomial)
   glm_pred <- predict(glm,
-                      newdata = as.data.frame(test_covs),
+                      newdata = as.data.frame(data_list$x_test),
                       type = "response")
 
   list(
     glm_dsdm_correl = cor(glm_pred, dsdm_pred),
-    glm_pa_correl = cor(glm_pred, test_pa),
-    dsdm_pa_correl = cor(dsdm_pred, test_pa),
-    glm_ll = loglik(glm_pred, test_pa),
-    dsdm_ll = loglik(dsdm_pred, test_pa),
-    glm_auc = auc(glm_pred, test_pa),
-    dsdm_auc = auc(dsdm_pred, test_pa)
+    glm_pa_correl = cor(glm_pred, data_list$pa_test),
+    dsdm_pa_correl = cor(dsdm_pred, data_list$pa_test),
+    glm_auc = auc(glm_pred, data_list$pa_test),
+    dsdm_auc = auc(dsdm_pred, data_list$pa_test)
   )
 
 }

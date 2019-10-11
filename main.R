@@ -53,11 +53,14 @@ source("R/modelling.R")
 
 fit_bbs_model <- drake_plan(
 
-  # prep data
+  # read in data
   bbs_occurrence = readRDS(file_in("data/clean/bbs_occ.RDS")),
   bbs_covs = brick(file_in("data/clean/bbs_covs.grd")),
   maps_coords = readRDS(file_in("data/clean/maps_stations.RDS")),
-  bbs_data_list = split_data(bbs_occurrence, bbs_covs, maps_coords),
+
+  # prepare the train/test split and design matrices
+  bbs_formula = ~ 1 + pcMix + pcDec + pcCon + bio1 + bio6 + bio12,
+  bbs_data_list = prep_data(bbs_formula, bbs_occurrence, bbs_covs, maps_coords),
 
   # model fitting
   bbs_model_list = build_bbs_model(bbs_data_list),
