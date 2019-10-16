@@ -102,4 +102,67 @@ A <- abind(top_row, bottom_row, along = 3)
 
 Given an `n` x `k` matrix `X`, length `k` vectors `beta_S` and `beta_F`, and a scalar `gamma`, where `n` is the number of sites and `k` the number of columns (covariates plus an intercept) of the design matrix.
 
+# Alternative observation models
+
+Below I provide alternative observation models for count, and presence-only data. occupancy detection observation models can be implemnted using other greta extension packages, but are byond the scope of this manuscript.
+
+## Poisson count data
+
+The relative abundance variable $Lambda_i$ is the parameter of the poisson distribution, so a poisson count model is simply given by:
+
+Notation:
+\begin{align}
+y_i &\sim Poisson(\Lambda_i)
+\end{align}
+
+Code:
+```{r poisson_obs}
+distribution(y) <- poisson(Lambda)
+```
+Where `y` is a vector of counts
+
+## Negative binomial count data
+
+Where count data are overdispersed with respect to the expected counts $\Lambda_i$, this overdispersion can be modelled with a negative binomial distribution as:
+
+Notation:
+\begin{align}
+p_i &= r / (r + \Lambda_i) \\ \nonumber
+y_i &\sim Negative Binomial(r, p_i)
+\end{align}
+Where the negative binomial is parameterised in terms of dispersion parameter $r$ representing the target number of successful trials, and $p_i$ the probability of success in each trial.
+
+Code:
+```{r negbin_obs}
+p <- r / (r + Lambda)
+distribution(y) <- negative_binomial(r, p)
+```
+Given a positive scalar `r`, and where y is a vector of counts. 
+
+## Presence-only data
+
+We assume presence-only data (where records consist of locations where the species was detected) arise from an a thinned, inhomogenous Poisson point process, as described in [@rennerPointProcessModels2015]. Under this definition, the DSDM relative abundance parameter $\Lambda_i$ represents a density of point observations per unit area (assumed homogenous across each site $i$) that *would* be seen if there were no spatial bias in rates of reporting. The expected number of presence-only observations in a location $i$ is therefore given by the product of the relative abundance $\Lambda_i$, the area $a_i$, and a relative measure of the bias in reporting, $\gamma_i$ (also assumed homogenous across $i$). Values of $\gamma_i$ for each location can be provided as data, or estimated during model-fitting via an additional regression submodel against detection covariates. Since $\Lambda_i$ is only identified to within a multiplicative constant ($\alpha$ in Equation 2), the absolute value of $\gamma_i$ is not identified in this model, so any model for $\gamma_i$ should probably not have an intercept term. 
+
+Notation:
+\begin{align}
+y_i &\sim Poisson(a_i\gamma_i\Lambda_i)
+\end{align}
+
+Code:
+```{r ppm_obs}
+distribution(y) <- poisson(a * gamma * Lambda)
+```
+Where `y` gives the number of presence-only records reported at site $i$ 
+
+## Integrated models
+
+Specification of integrated models (those with multiple likelihoods for different datatypes) is simple, simply by using multiple `distribution()` statements. For example, a a combined presence-absence and abundance model might be defined as:
+
+```{r integrated_obs}
+p <- 1 - exp(-Lambda[pa_locations])
+distribution(y_pa) <- bernoulli(p)
+distribution(y_count) <- poisson(Lambda[count_locations])
+```
+Where `pa_locations` and `count_locations` are numeric indices to the sites with to presence-absence and count data respectively, and `y_pa` and `y_count` are the corresponding vectors of observed data.
+
 # References

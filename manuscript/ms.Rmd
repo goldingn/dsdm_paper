@@ -242,6 +242,8 @@ An observation model for count data can be specified simply by replacing the Ber
 A model for presence-only data can be formed by considering the data as arising from a Poisson point process with $\Lambda_i$ as the intensity at location $i$ [@rennerPointProcessModels2015]. Integration areas for each observation, and a model or prespecified site value for spatial sampling bias can be provided via $\alpha$.
 Similarly, where repeat surveys are available, a model for $\alpha$ can be used to estimate the detection probability as in an occupancy-detection analysis [@mackenzieEstimatingSiteOccupancy2002]. 
 
+Since these observation models all relate to $\Lambda_i$, multiple likelihoods could be specified to form an *integrated* DSDM to be fitted to multiple datasets. The integration of multiple liklihoods could enable estimation of parameters such as spatial bias in reporting rates of presence-only data, or to leverage datasets which differ in their spatial and temporal extents or informativeness with respect to growth rates and vital rates.
+
 # Temporal dynamics
 
 The example DSDM given above is temporally static: the covariate values, vital rate parameters, transition matrix and intrinsic growth rate at each site are assumed to be constant through time.
