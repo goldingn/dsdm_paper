@@ -148,7 +148,7 @@ Example 2 then develops a more complex DSDM incorporating detailed knowledge of 
 <blame link between growth rate and probability of presence on Jorn, point reader to section on extensions for density-dependent solution>
 <suggest doing Bayesian inference - propagate uncertainty and incorporate any prior information to help the model disentangle the spatial signal>
 
-```{r schematic, echo = FALSE, fig.cap = "Demographic species distribution models in the context of other models of distribution and demography. A) Correlative species distribution models (SDMs) use a correlative mathematical relationship - such as a logit-linear model - to predict a species' distribution from spatial covariates. The predicted distribution (for a given set of parameter values) is compared to observed distribution data using an observation model - such as a Bernoulli distribution, for presence-absence data. Statistical inference is performed to infer the correlative model parameters from the distribution data. B) Matrix population models (MPMs) and integral projections models (IPMs) combine either direct estimates, or correlative models, of vital rates like survival and fecundity to predict demographic quantities such as the population growth rate. Spatial IPMs apply these models to covariate values at each pixel in the landscape, and therefore map the distributions of vital rates and species. Unlike correlative SDMs, the parameters of MPMs, IPMs, and spatial IPMs are inferred from data on population dynamics at specific locations, rather than distribution data. Demographic SDMs (proposed here) combine correlative SDMs and spatial IPMs; replacing the arbitrary correlative model in a correlative SDM with an MPM or IPM, and inferring model parameters by fitting the whole model statistically to observed distributions. Equations correspond to the model considered in Example 1, but represent a wide range of correlative, population dynamic, and observation models that could be used in this framework.", out.width = "\\textwidth"}
+```{r schematic, echo = FALSE, fig.cap = "Demographic species distribution models in the context of other models of distribution and demography. A) Correlative species distribution models (SDMs) use a correlative mathematical relationship - such as a logit-linear model - to predict a species' distribution from spatial covariates. The predicted distribution (for a given set of parameter values) is compared to observed distribution data using an observation model - such as a Bernoulli distribution, for presence-absence data. Statistical inference is performed to infer the correlative model parameters from the distribution data. B) Matrix population models (MPMs) and integral projection models (IPMs) combine either direct estimates, or correlative models, of vital rates like survival and fecundity to predict demographic quantities such as the population growth rate. Spatial IPMs apply these models to covariate values at each pixel in the landscape, and therefore map the distributions of vital rates and species. Unlike correlative SDMs, the parameters of MPMs, IPMs, and spatial IPMs are inferred from data on population dynamics at specific locations, rather than distribution data. Demographic SDMs (proposed here) combine correlative SDMs and spatial IPMs; replacing the arbitrary correlative model in a correlative SDM with an MPM or IPM, and inferring model parameters by fitting the whole model statistically to observed distributions. Equations correspond roughly to the model considered in Example 1, but represent a wide range of correlative, population dynamic, and observation models that could be used in this framework, with choice of function $f()$ dictating the relationship between the species' transition matrix and relative abundance.", out.width = "\\textwidth"}
 knitr::include_graphics("../figures/schematic.png")
 ```
 
@@ -160,7 +160,7 @@ A two-stage matrix population model for the species has previously been develope
 The spatially static matrix population model from this previous analysis was defined by transition matrix $\mathbf{A}$:
 
 \begin{align}
-\mathbf{A} = \begin{pmatrix} F \cdot S_J & F \cdot S_A \\ S_J & S_A \end{pmatrix}
+\mathbf{A} = \begin{bmatrix} F \cdot S_J & F \cdot S_A \\ S_J & S_A \end{bmatrix}
 \end{align}
 
 where and $F$, $S_J$, and $S_A$ are estimates of annual fecundity, juvenile survival, and adult survival rates respectively for the entire North American population of the species.
@@ -170,14 +170,14 @@ Whilst these estimates provide detailed information with which to predict popula
 To this end, I constructed a DSDM based on this model, but where the population in each location $i$ has a distinct set of vital rates, each given by a vital rate regression to model how vital rates vary according to environmental covariates:
 
 \begin{align}
-\mathbf{A}_i &= \begin{pmatrix} F_i \cdot S_{Ji} & F_i \cdot S_{Ai} \\ S_{Ji} & S_{Ai}  \end{pmatrix} \\ \nonumber
+\mathbf{A}_i &= \begin{bmatrix} F_i \cdot S_{Ji} & F_i \cdot S_{Ai} \\ S_{Ji} & S_{Ai}  \end{bmatrix} \\ \nonumber
 ln(F_i) &= \mathbf{X}_i\beta_F \\ \nonumber
 logit(S_{Ai}) &= \mathbf{X}_i\beta_S \\ \nonumber
 logit(S_{Ji}) &= logit(S_{Ai}) - \gamma
 \end{align}
 
 where $\mathbf{X}$ is a design matrix of environmental covariates and an intercept dummy variable for the fecundity and survival submodels and $\beta_F$ and $\beta_S$ are vectors of regression coefficients for the two submodels.
-Rather than separately modelling spatial variation in adult and juvenile fecundity, I assume that the environmental predictors of survival are the same in both stages, but that juvenile survival differs from adult survival by a constant amount on the logit scale (to maintain the 0-1 constraints on survival parameters).
+Rather than separately modelling spatial variation in adult and juvenile fecundity, I assume that the environmental predictors of survival are the same in both stages, but that juvenile survival differs from adult survival by a constant amount on the logit scale - to maintain the (0,1) constraint on survival probabilities.
 
 I specify an observation model for presence-absence data:
 
@@ -189,7 +189,7 @@ K_i &= (\lambda_i - 1) \alpha \\ \nonumber
 \lambda_i &= eigval(\mathbf{A_i})
 \end{align}
 
-where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the populations at location $i$. The theoretical carrying capacity at each site $K_i$ is computed from the carrying capacity relationship of the Beverton-Holt model. $K_i$ has negative values $\lambda_i < 1$, so it is transformed to an always-positive relative abundance parameter $\Lambda_i$ via the softplus function. The softplus transformation is a smooth version of the Heaviside function (which sets negative values to zero), so $\Lambda_i$ almost identical to $K_i$ for most $lambda_i > 1$, rapidly approaches zero below $lambda_i = 1$. This formulation is statistically convenient, but as discussed in the text below, DSDMs can incorporate more complex and realistic forms of density-dependence if required. 
+where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the populations at location $i$. The theoretical carrying capacity at each site $K_i$ is computed from the carrying capacity relationship of the Beverton-Holt model. $K_i$ has negative values $\lambda_i < 1$, so it is transformed to an always-positive relative abundance parameter $\Lambda_i$ via the softplus function. The softplus transformation is a smooth version of the Heaviside function (which sets negative values to zero), so $\Lambda_i$ closely approximates $K_i$ for most $lambda_i > 1$, and rapidly approaches zero below $lambda_i = 1$. This formulation is statistically convenient, but as discussed in the text below, DSDMs can incorporate more complex and realistic forms of density-dependence if required. 
 The parameter $\alpha$ controls the relationship between the intrinsic population growth rate and relative abundance. It is a compound of two parameters that are only identified together: the Beverton-Holt density-dependence parameter relating growth rates to carrying capacities; and the detection rate - the fraction of individuals in the total population that are detected during a presence-absence survey at site $i$.  
 From $\Lambda_i$, we obtain the probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
 
@@ -231,14 +231,15 @@ Note that this model could undoubtedly be improved by including more information
 
 # Alternative DSDM specifications
 
-The DSDM structure given in equations 2-3 is the simplest version.
-It can easily be extend to accommodate alternative data types and demographic processes, and answer a range of ecological questions. Whilst statistical inference against distribution data could be performed on almost any demographic model, I restrict the models discussed here to those that are amenable to efficient MCMC methods. Specifically, models with likelihoods that are analytically tractable, and can be differentiated with respect to parameter values. This enables the use of modern gradient-based MCMC samplers [@monnahanFasterEstimationBayesian2017], thought it necessarily restricts the scope of these models to those with only continuous parameters. The model variations I propose below encompass a wide range of features whist remaining within these constraints, and can also make use of efficient vectorised and linear algebra routines, meaning that should scale well to large datasets.
+The DSDM structure given in equations 2-3 is simple version for presence-absence data which makes a number of assumptions about the species ecology. This structure can easily be extended to accommodate alternative data types and demographic processes, and answer a range of ecological questions. I detail a number of proposed variants below, and provide full notation and example code in Appendix A.
+
+Whilst statistical inference against distribution data could be performed on almost any demographic model, I restrict the models discussed here to those that are amenable to efficient MCMC methods. Specifically: models with likelihoods that are tractable (the exact value of likelihood can be computed from the parameters and data), and can be differentiated with respect to parameter values. This enables the use of modern gradient-based MCMC samplers [@monnahanFasterEstimationBayesian2017], thought it necessarily restricts the scope of these models to those with only continuous parameters. The model variations I propose below encompass a wide range of features whist remaining within these constraints, and can also make use of efficient vectorised and linear algebra routines, meaning that should scale well to the large datasets commonly used for fitting SDMs.
 
 ## Alternative observation models
 
 DSDMs explicitly consider the density of individuals at each location through the relative abundance variable $\Lambda_i$. This provides a link to the most commonly used observations for modelling species distributions in ecology.
-An observation model for count data can be specified simply by replacing the bernoulli sampling distribution in equation 3 with an appropriate count (such as a Poisson or negative binomial distribution) with $\Lambda_i$ as the expected count.
-A model for presence-only data can be formed by considering the data as arising from a Poisson point process with $\Lambda_i$ as the intensity at location $i$ [@rennerPointProcessModels2015]. Integration areas for each observation, and any modelled or prespecified sampling bias can be provided via $\alpha$.
+An observation model for count data can be specified simply by replacing the Bernoulli sampling distribution in equation 3 with an appropriate count distribution (such as Poisson or negative binomial) and using $\Lambda_i$ as the expectation.
+A model for presence-only data can be formed by considering the data as arising from a Poisson point process with $\Lambda_i$ as the intensity at location $i$ [@rennerPointProcessModels2015]. Integration areas for each observation, and a model or prespecified site value for spatial sampling bias can be provided via $\alpha$.
 Similarly, where repeat surveys are available, a model for $\alpha$ can be used to estimate the detection probability as in an occupancy-detection analysis [@mackenzieEstimatingSiteOccupancy2002]. 
 
 # Temporal dynamics
