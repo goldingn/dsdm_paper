@@ -296,6 +296,11 @@ By modelling demographic rates of one species as dependent on the abundance of a
 
 add example matrix structure as an equation
 
+# Vital rate regression models
+
+The basic DSDM introduced in the manuscript only considers simple linear models of environmental variables for (appropriately transformed) vital rates. An advantage of specifying these models in a general-purpose statistical modelling software is that these simple models can be replaced with one of any number of statistical models, as appropriate.
+
+For example, theese linear models could be applied to very large numbers of covariates and transformations thereof in combination with regularising priors to perform automatic variable selection, similarly to the popular Maxent SDM software[@phillipsModelingSpeciesDistributions2008]. Or to specify mixed-effects models to account for clustered sampling designs, or use random slopes to share environmental reponse information between species in a biotic interaction DSDM. Instead of linear models, non-linear functions could be introduced with generalisd additive models or Gaussian process models, for which there are existing greta extension packages: greta.gam and greta.gp [@cGretaGamGeneralised2019; @goldingGretaGpGaussian2019]. These can also be used to model spatial and teemporal random effects and account for drivers of species vital rates that are not captured in the measured environmental variables. Prespecified mathematical relationships or covariate values can also be included, enabling incorporation of  spatial and temporal predictions from physiological models.
 
 # Example 2. A DSDM for *Protea repens*
 
