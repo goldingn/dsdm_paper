@@ -1,0 +1,105 @@
+---
+title: "Appendix A - Alternative DSDM formulations"
+author:
+  - Nick Golding
+  - School of BioSciences, University of Melbourne, Parkville VIC, Australia
+bibliography: dsdm.bib
+csl: mee.csl
+output:
+  pdf_document:
+  word_document:
+    fig_caption: true
+    highlight: null
+---
+
+```{r knitrOpts, echo = FALSE, cache = FALSE, eval = TRUE}
+# set up knitr options
+knitr::opts_chunk$set(message = FALSE,
+               warning = FALSE,
+               eval = FALSE,
+               cache = FALSE)
+```
+
+This appendix provides notation and, where available, computer code for R packages greta and greta.dynamics [@goldingGretaDynamicsModelling2019; @goldingGretaSimpleScalable2019] to implement the DSDMs proposed in the manuscript *Demographic Species Distribution Models* by Nick Golding.
+
+Note that statistical notation is written in the standard way, with the first line giving the sampling distribution, and subsequent lines defining the variables on whhich they depend, however the code uses the reverse order since in greta those variables must be defined bfore they can be used.
+
+# Basic DSDM
+
+For ease of reference, I repeat the equations and interpretation for the basic presence-absence DSDM presented in the main manuscript. It presents the model in its three parts, each of which can be modified independently. Specification of priors for parameters in the model are not discussed here. See [@goldingGretaSimpleScalable2019] and the website [greta-stats.org](https://greta-stats.org) for general guidance on how to build models with greta.
+
+## Observation model
+
+The observation model for the basic DSDM relates the species' relative abundance (I.e. assumed to be within a multiplicative constant of the true abundance) $\Lambda_i$ at site $i$ to the probability of (observed) presence $p_i$ during a single presence-absence survey, and the presence-absence data are assumed to be independently Bernoulli-distributed following these probabilities as in a presence-absence species distribution model.
+
+Notation:
+
+\begin{align}
+y_i &\sim Bernoulli(p_i) \\ \nonumber
+p_i &= 1 - e^{-\Lambda_i}
+\end{align}
+
+Code:
+
+```{r basic_obs}
+p <- 1 - exp(-Lambda)
+distribution(y) <- bernoulli(p)
+```
+
+Given vectors `Lambda` and `y` each with length `n`, the number of sites.
+
+## Abundance relationship
+
+The abundance relationship relates the transition matrix $\mathbf{A}_i$ of the population at site $i$ to the relative abundance $\Lambda_i$. The intrinsic growth rate $\lambda_i$ of the population is used to compute the theoretical carrying capacity $K_i$ according to the Beverton-Holt model, with competition effect parameter $\alpha$. This theoretical carrying capacity is negative when $\lambda_i < 1$, so it is rectified by the softplus function to always yield a positive abundance $\Lambda_i$, which is close to zero when $\lambda_i < 1$, and approximately equal to $K_i$ when $\lambda_i > 1$.
+
+Notation:
+
+\begin{align}
+\Lambda_i &= ln(1 + e^{K_i})  \\ \nonumber
+K_i &= (\lambda_i - 1) \alpha \\ \nonumber
+\lambda_i &= eigval(\mathbf{A_i})
+\end{align}
+
+Code:
+
+```{r basic_abundance}
+analysis <- iterate_matrix(A)
+lambda <- analysis$lambda
+K <- (lambda - 1) * alpha
+Lambda <- log1pe(K)
+```
+
+Given a 3D array `A` with dimensions `n` x `m` x `m`, where `n` is the number of sites, and `m` the number of stages in the population model (dimension of the matrices $\mathbf{A}_i$), and `alpha` is a scalar. When used with its default settings the function `greta.dynamics::iterate_matrix()` returns, among other quantities, a vector of intrinsic growth rates of the matrices in `A` computed by repeated iteration of the matrix
+
+## Transition matrix and vital rate regressions
+
+The transition matrix $\mathbf{A}_i$ describes the fundamental dynamics of the population at location $i$, with cells expressing the rates of transition from each stage at the previous timestep (columns) to each stage in the present time step (rows). Thus for each adult in the previous time step $F_i \cdot S_{Ai}$ juveniles are contributed to the population in the current time step: each adult survives with probability $S_{Ai}$, and produces an average of $F_i$ offspring, with the product of these giving the expected contribution per adult. For more details of matrix population models such as this, see [@caswellMatrixPopulationModels2001].
+
+Each of these vital rates at each site $i$ is given by a linear model against a design matrix $\mathbf{X}_i$ representing environmental covariates, an intercept (coded as a column of all ones), and any transformations of those covariates
+
+Notation:
+
+\begin{align}
+\mathbf{A}_i &= \begin{bmatrix} F_i \cdot S_{Ji} & F_i \cdot S_{Ai} \\ S_{Ji} & S_{Ai}  \end{bmatrix} \\ \nonumber
+ln(F_i) &= \mathbf{X}_i\beta_F \\ \nonumber
+logit(S_{Ai}) &= \mathbf{X}_i\beta_S \\ \nonumber
+logit(S_{Ji}) &= logit(S_{Ai}) - \gamma
+\end{align}
+
+Code:
+
+```{r basic_transition}
+log_F <- X %*% beta_F
+logit_S_A <- X %*% beta_S
+F <- exp(log_F)
+S_A <- ilogit(logit_S_A)
+S_J <- ilogit(logit_S_A - gamma)
+
+top <- cbind(F * S_J, F * S_A)
+bottom <- cbind(S_J, S_A)
+A <- abind(top_row, bottom_row, along = 3)
+```
+
+Given an `n` x `k` matrix `X`, length `k` vectors `beta_S` and `beta_F`, and a scalar `gamma`, where `n` is the number of sites and `k` the number of columns (covariates plus an intercept) of the design matrix.
+
+# References
