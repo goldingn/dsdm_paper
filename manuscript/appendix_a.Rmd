@@ -7,6 +7,8 @@ bibliography: dsdm.bib
 csl: mee.csl
 output:
   pdf_document:
+    toc: true
+    toc_depth: 2
   word_document:
     fig_caption: true
     highlight: null
@@ -19,6 +21,8 @@ knitr::opts_chunk$set(message = FALSE,
                eval = FALSE,
                cache = FALSE)
 ```
+
+# Introduction
 
 This appendix provides notation and, where available, computer code for R packages greta and greta.dynamics [@goldingGretaDynamicsModelling2019; @goldingGretaSimpleScalable2019] to implement the DSDMs proposed in the manuscript *Demographic Species Distribution Models* by Nick Golding.
 
@@ -97,7 +101,7 @@ S_J <- ilogit(logit_S_A - gamma)
 
 top <- cbind(F * S_J, F * S_A)
 bottom <- cbind(S_J, S_A)
-A <- abind(top_row, bottom_row, along = 3)
+A <- abind(top, bottom, along = 3)
 ```
 
 Given an `n` x `k` matrix `X`, length `k` vectors `beta_S` and `beta_F`, and a scalar `gamma`, where `n` is the number of sites and `k` the number of columns (covariates plus an intercept) of the design matrix.
@@ -137,7 +141,7 @@ Code:
 p <- r / (r + Lambda)
 distribution(y) <- negative_binomial(r, p)
 ```
-Given a positive scalar `r`, and where y is a vector of counts. 
+Given a positive scalar `r`, and where y is a vector of counts. `r` and `p` correspond to the `size` and `prob` arguments of `stats::dnbinom` in R.
 
 ## Presence-only data
 
