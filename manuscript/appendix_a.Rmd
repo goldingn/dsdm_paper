@@ -170,4 +170,87 @@ distribution(y_count) <- poisson(Lambda[count_locations])
 ```
 Where `pa_locations` and `count_locations` are numeric indices to the sites with to presence-absence and count data respectively, and `y_pa` and `y_count` are the corresponding vectors of observed data.
 
+# Alternative abundance relationships
+
+## Ricker model
+
+The abundance relationship in the DSDM presented in the manuscript derives from the Beverton-Holt model, with the carrying capacity $K_i$ proportional to the intrinsic growth rate $\lambda_i$ minus one. This ensures that $K_i$ is zero if $\lambda_i = 1$ (no growth) and increases as lambda increases, though it has the unfortunate consequence that $K_i$ has negative values for $\lambda_i < 1$, which must be rectified in that model. An alternative abundance relationship approach, given in [@pagelForecastingSpeciesRanges2012], derives from the Ricker model and has a linear relationship between $K_i$ and $\lambda_i$, yielding a relative abundance expression that does not need rectifying. Though with large enough $\alpha$, this approach can yield large values of $\Lambda_i$ even if $\lambda_i$ is well below 1, in which  case the species should not be able to persist.
+
+Notation:
+\begin{align}
+\Lambda_i &= \lambda_i \alpha \\ \nonumber
+\lambda_i &= eigval(\mathbf{A_i})
+\end{align}
+
+Code:
+```{r ricker_abundance}
+analysis <- iterate_matrix(A)
+lambda <- analysis$lambda
+Lambda <- lambda * alpha
+```
+
+## Density-dependent vital rates
+
+Both the Ricker and Beverton-Holt approaches to the abundance relationship assume that the carrying capacity can be expressed as some function of the intrinsic growth rate. This is convenient since the intrinsic growth rate is a well-studied and simple to compute quantity of a temporally-static transition matrix $A_i$. However, a more ecologically realistic approach is to explicitly model the vital rates as being density-dependent - that is having the survival probabilities or fecundity rates at a given time point depend on the population density at the previous time point. This enables incorporation of more detailed ecological knowledge about how vital rates drive abundance, which may be important to consider if the answer to the ecological question of interest depends on density dependence.
+
+Density dependent vital rates can be incorporated in a DSDM by explicitly considering a vector $\mathbf{n}_{i,t}$ of population densities for each of $m$ life stages (indexed with $j$) at site $i$, at time $t$. $\mathbf{n}_{i,t}$ is evolved through time by multiplication against a timepoint-specific transition matrix $\mathbf{A}_{i,t}$, contructed of timepoint-specific vital rates that depend on the total population density (i.e. across all life stages $m$) in the previous time point $\mathbf{N}_{i,t}$. For example, these density-dependent relationships could be a linear function of population density (controlled by parameters $\alpha_F$ and $\alpha_S$) on the link-scale of the vital rates. Since the transition matrix is no longer temporally-static, the population dynamics cannot be summarised by a population growth rate. Instead, iteration of the matrix using the density-dependent vital rate functions causes the vector $\mathbf{n}_{i,t}$ of population densities to converge on a static value after a sufficient number of iterations, $T$. This terminal density can be used directly as the relative abundance. As in the basic DSDM, the parameters $\alpha_F$ and $\alpha_S$ control both density-dependence and the detection rate, since these two processes cannot be differentiated without population growth data.
+
+Notation:
+\begin{align}
+\Lambda_i &=  \mathbf{n}_{i, T} \\ \nonumber
+\mathbf{n}_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
+\mathbf{A}_{i,t+1} &= \begin{bmatrix} F_{i,t} \cdot S_{Ji,t} & F_{i,t} \cdot S_{Ai,t} \\ S_{Ji,t} & S_{Ai,t}  \end{bmatrix}  \\ \nonumber
+ln(F_{i,t}) &= \mathbf{X}_i \beta_F + \alpha_F \textstyle\sum_{j=1}^m{\mathbf{n}_{i,t,j}}\\ \nonumber
+logit(S_{Ai,t}) &= \mathbf{X}_i \beta_S + \alpha_S \textstyle\sum_{j=1}^m{\mathbf{n}_{i,t,j}} \\ \nonumber
+logit(S_{Ji,t}) &= logit(S_{Ai,t}) - \gamma
+\end{align}
+
+Code:
+```{r vital_dd_abundance}
+dynamic_A <- function(state, iter, log_F, logit_S, alpha_F, alpha_S, gamma) {
+  
+  N <- rowSums(state)
+  log_F_t <- base_log_F + N * alpha_F
+  logit_S_A_t <- base_logit_S + N * alpha_S
+  
+  F_t <- exp(log_F_t)
+  S_A_t <- ilogit(logit_S_A_t)
+  S_J_t <- ilogit(logit_S_A_t - gamma)
+
+  top <- cbind(F_t * S_J_t, F_t * S_A_t)
+  bottom <- cbind(S_J_t, S_A_t)
+  A_t <- abind(top, bottom, along = 3)
+  A_t
+  
+}
+
+analysis <- iterate_dynamic_matrix(
+  matrix_function = dynamic_A, 
+  base_log_F = X %*% beta_F,
+  base_logit_S = X %*% beta_S,
+  alpha_F = alpha_F,
+  alpha_S = alpha_S,
+  gamma = gamma
+)
+
+Lambda <- analysis$stable_population
+```
+Given additional scalar parameters `alpha_F` and `alpha_S`.
+
+# Temporally-varying abundance
+
+## Long-term environmental variation
+
+## Short term environmenatal variation
+
+
+# Transition matrix models
+
+## Integral projection models
+
+## Multiple species
+
+## Dispersal
+
+
 # References
