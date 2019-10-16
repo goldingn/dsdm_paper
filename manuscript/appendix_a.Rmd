@@ -61,7 +61,7 @@ Notation:
 \begin{align}
 \Lambda_i &= ln(1 + e^{K_i})  \\ \nonumber
 K_i &= (\lambda_i - 1) \alpha \\ \nonumber
-\lambda_i &= eigval(\mathbf{A_i})
+\lambda_i &= eigval(\mathbf{A}_i)
 \end{align}
 
 Code:
@@ -207,11 +207,11 @@ logit(S_{Ji,t}) &= logit(S_{Ai,t}) - \gamma
 
 Code:
 ```{r vital_dd_abundance}
-dynamic_A <- function(state, iter, log_F, logit_S, alpha_F, alpha_S, gamma) {
+A_t_function <- function(state, iter, log_F, logit_S, alpha_F, alpha_S, gamma) {
   
   N <- rowSums(state)
-  log_F_t <- base_log_F + N * alpha_F
-  logit_S_A_t <- base_logit_S + N * alpha_S
+  log_F_t <- base_log_F +  alpha_F * N
+  logit_S_A_t <- base_logit_S + alpha_S * N
   
   F_t <- exp(log_F_t)
   S_A_t <- ilogit(logit_S_A_t)
@@ -225,7 +225,7 @@ dynamic_A <- function(state, iter, log_F, logit_S, alpha_F, alpha_S, gamma) {
 }
 
 analysis <- iterate_dynamic_matrix(
-  matrix_function = dynamic_A, 
+  matrix_function = A_t_function, 
   base_log_F = X %*% beta_F,
   base_logit_S = X %*% beta_S,
   alpha_F = alpha_F,
@@ -239,10 +239,68 @@ Given additional scalar parameters `alpha_F` and `alpha_S`.
 
 # Temporally-varying abundance
 
+Given temporally-indexed response data $y_{i,t}$, temporal variation in environmental conditions and therefore vital rates can be included in a DSDM in one of two ways. The applicability of each of these depends on both the temporal scale of the data (the period of time betwen the observations) and the demographics of the species.
+
 ## Long-term environmental variation
 
-## Short term environmenatal variation
+If the length of time between observations is on the order of multiple generations opf the species population, it may be reasonable to assume that the observed population sixes are reflective of contemporary environmental conditions only, and not past fluctuations in environental conditions. In other words, that the population is at, or close to, the long-term carrying capacity of the species if the current environmental conditions were to be held static. In this situation, considering temporal change in environmental conditions is simply a matter of redifining the index $i$ in the basic DSDM to indeex unique combinations of time and site, instead of just site. The relative abundance parameter for each of these observations is therefore computed from the intrinsic growth rate of the transition matrix at the corresponding environmental conditions.
 
+## Short term environmental variation
+
+Where the time period between observations is sufficiently short that the assumptions above are not met, or when the ecological question being answered requires it, temporal fluctuation in vital rates can instead be modelled by explicitly iterating the population through successive timesteps, at each time step using the corresponding transition matrix, as in the density-dependent vital rate model above. Instead of iterating for some arbitrrary number of iterations $T$ and taking the final state, instead the population is iterated over all timesteps $t$ covering the timepoints for which there were observations as well as all intervening timesteps. Under this formulation, the population size parameters $\mathbf{n}_{i,t}$ will be affected by the initial population state $\mathbf{n}_{i,0}$. this can either be introduced as an unknown parameter in the model, or set to an arbitrary value, and adding a sufficient 'burn-in' period prior to the first observation such that its value has no little effect on the estimated model parameters.
+
+This model does not use static transition matrices and therefore cannot describe density dependence as a simple function of an intrinsic growth rate. It should therefore be combined with an explicit consideration of density-dependent vital rates as in the model above so that the population sizes $\mathbf{n}_{i,t}$ tend toward a long-term carrying capacity, rather than towards zero or infinity. 
+
+Notation:
+\begin{align}
+y_{i,t} &\sim Bernoulli(p_{i,t}) \\ \nonumber
+p_{i,t} &= 1 - e^{-\Lambda_{i,t}} \\ \nonumber
+\Lambda_{i,t} &=  \mathbf{n}_{i,t} \\ \nonumber
+\mathbf{n}_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
+\mathbf{A}_{i,t+1} &= \begin{bmatrix} F_{i,t} \cdot S_{Ji,t} & F_{i,t} \cdot S_{Ai,t} \\ S_{Ji,t} & S_{Ai,t}  \end{bmatrix}  \\ \nonumber
+ln(F_{i,t}) &= \mathbf{X}_{i,t} \beta_F + \alpha_F \textstyle\sum_{j=1}^m{\mathbf{n}_{i,t,j}}\\ \nonumber
+logit(S_{Ai,t}) &= \mathbf{X}_{i,t} \beta_S + \alpha_S \textstyle\sum_{j=1}^m{\mathbf{n}_{i,t,j}} \\ \nonumber
+logit(S_{Ji,t}) &= logit(S_{Ai,t}) - \gamma
+\end{align}
+
+Note that this notation is very similar to the density-dependent vital rate model, except that both the observation model (the first three lines) and the design matrix $\mathbf{X}$ are temporally-indexed, and the relative abundances $\Lambda_{i,t}$ are given by the contemporary population sizes, not the terminal sizes.
+
+Code:
+```{r short_term_temporal}
+A_t_function <- function(state, iter, X, beta_F, beta_S, alpha_F, alpha_S, gamma) {
+  
+  N <- rowSums(state)
+  log_F_t <- X %*% beta_F +  alpha_F * N
+  logit_S_A_t <- X %*% beta_S + alpha_S * N
+  
+  F_t <- exp(log_F_t)
+  S_A_t <- ilogit(logit_S_A_t)
+  S_J_t <- ilogit(logit_S_A_t - gamma)
+
+  top <- cbind(F_t * S_J_t, F_t * S_A_t)
+  bottom <- cbind(S_J_t, S_A_t)
+  A_t <- abind(top, bottom, along = 3)
+  A_t
+  
+}
+
+analysis <- iterate_dynamic_matrix(
+  matrix_function = A_t_function, 
+  initial_state = n_init,
+  niter = timesteps,
+  X = X_list,
+  beta_F = beta_F,
+  beta_S = beta_S,
+  alpha_F = alpha_F,
+  alpha_S = alpha_S,
+  gamma = gamma
+)
+
+Lambda <- analysis$all_states
+p <- 1 - exp(-Lambda)
+distribution(y) <- bernoulli(p)
+```
+Given: `X_list` a list of length $T$ of design matrices for each of the time points, `n_init` is the initial population state, and `y` is a $N$x$T$ matrix of presence-absence at each timestep and site, and `timesteps` is the value of $T$.
 
 # Transition matrix models
 
