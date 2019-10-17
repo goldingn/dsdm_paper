@@ -17,7 +17,7 @@ Depends:
     fields,
     future,
     future.apply,
-    greta.dynamics,
+    greta,
     maxlike,
     pROC,
     raster,
@@ -25,5 +25,7 @@ Depends:
     roxygen2,
     truncdist,
     viridis
+Remotes:
+    greta.dynamics
 Encoding: UTF-8
 LazyData: true
