@@ -26,6 +26,6 @@ Depends:
     truncdist,
     viridis
 Remotes:
-    goldingn/greta.dynamics
+    greta-dev/greta.dynamics
 Encoding: UTF-8
 LazyData: true
