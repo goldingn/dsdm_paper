@@ -1,0 +1,29 @@
+Type: Compendium
+Package: DSDM paper
+Title: A Research Paper About Demographic Species Distribution Models
+Version: 0.0.1
+Authors@R: 
+    person(given = "Nick",
+           family = "Golding",
+           role = c("aut", "cre"),
+           email = "nick.golding.research@gmail.com",
+           comment = c(ORCID = "0000-0001-8916-5570"))
+Description: This repository contains the source code for a paper on Demographic Species Distribution Models - statistical models of species distributions that explicitly consider spatial variation in vital rates (like survival and fecundity) and population dynamics. It's very much a work in progress.
+License: MIT + file LICENSE
+Depends: 
+    devtools,
+    dplyr,
+    drake,
+    fields,
+    future,
+    future.apply,
+    greta.dynamics,
+    maxlike,
+    pROC,
+    raster,
+    RColorBrewer,
+    roxygen2,
+    truncdist,
+    viridis
+Encoding: UTF-8
+LazyData: true
