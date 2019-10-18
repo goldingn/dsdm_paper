@@ -399,7 +399,9 @@ distribution(y) <- bernoulli(p)
 
 ## Biotic interactions
 
-Simultaneous demographic species distribution modelling of multiple species can be achieved by replacing the population transition matrices at each site $\mathbf{A}_i$ with a block-diagonal matrix comprising the population transition matrices for all the species of interest in the diagonal blocks. For a two-species model $\mathbf{A}_i$ therefore has dimension $(M1+M2)$x$(M1+M2)$, where $M1$ and $M2$ are the number of life stages for species 1 and 2 respectively. Since an individual can neither change species or produce offspring of another species, the off-diagonal blocks are all zero. Interactions between these species can be encoded in density-dependent vital rates, with the density of both conspecific and intraspecific populations having an impact.
+Simultaneous demographic species distribution modelling of multiple species can be achieved by replacing the population transition matrices at each site $\mathbf{A}_i$ with a block-diagonal matrix that has the population transition matrices for each species on the diagonal. For model of $L$ species each with $M$ lifestages $\mathbf{A}_i$ therefore has dimension $LM$x$LM$. The off-diagonal blocks are all zero-matrices, since an individual can neither change species nor produce offspring of another species. Interactions between species can be encoded via density-dependent vital rates, with the density of both conspecific and intraspecific populations affecting the vital rates of each species.
+
+As in the single-species density-dependent vital rate model above the relative population density for each species is computed by iteration; at each timestep recalculating the transition matrix from population densities of all species and matrix-multiplying it by the current population density vector to obtain the subsequent population density vector. The transition matrix $\mathbf{A}_i$ is sparse; with only 1 in $L$ elements being non-zero. This iteration can therefore be carried out efficiently with sparse matrix-multiplication operations.
 
 
 ##### Notation
@@ -412,22 +414,67 @@ Simultaneous demographic species distribution modelling of multiple species can 
 \vdots & & \mathbf{A}_{l,i,t+1} & & \vdots \\
 & & & \ddots & \\
 0 & & \dots & & \mathbf{A}_{L,i,t+1} \end{bmatrix} \\ \nonumber
-\mathbf{A}_{l,i,t+1} &= \begin{bmatrix} F_{l,i,t} \cdot S_{J_{l,i,t}} & F_{l,i,t} \cdot S_{A_{l,i,t}} \\ S_{J_{l,i,t}} & S_{A_{l,i,t}}  \end{bmatrix}  \\ \nonumber
-ln(F_{l,i,t}) &= \mathbf{X}_i \beta_{F_l} + \textstyle\sum_{l'=1}^{L}{\alpha_{F_{l,l'}} \mathbf{N}_{l',i,t}}\\ \nonumber
-logit(S_{A_{l,i,t}}) &= \mathbf{X}_i \beta_{S_l} + \textstyle\sum_{l'=1}^{L}{\alpha_{S_{l,l'}} \mathbf{N}_{l',i,t}}\\ \nonumber
-logit(S_{J_{l,i,t}}) &= logit(S_{A_{l,i,t}}) - \gamma_l \\ \nonumber
+\mathbf{A}_{l,i,t+1} &= \begin{bmatrix} \mathbf{F}_{l,i,t} \cdot \mathbf{S}_{J_{l,i,t}} & \mathbf{F}_{l,i,t} \cdot \mathbf{S}_{A_{l,i,t}} \\ \mathbf{S}_{J_{l,i,t}} & \mathbf{S}_{A_{l,i,t}}  \end{bmatrix}  \\ \nonumber
+ln(\mathbf{F}_{t}) &= \mathbf{X} \beta_F + \mathbf{N}_{t} \mathbf{\alpha}_F \\ \nonumber
+logit(\mathbf{S}_{A_{t}}) &= \mathbf{X} \beta_S + \mathbf{N}_{t} \mathbf{\alpha}_S \\ \nonumber
+logit(\mathbf{S}_{J_{l,i,t}}) &= logit(\mathbf{S}_{A_{l,i,t}}) - \gamma_l \\ \nonumber
 \mathbf{N}_{l,i,t} &= \textstyle\sum_{j=1+(l - 1)}^{lM}{\mathbf{n}_{i,j,t}}
 \end{align}
 
+where $\mathbf{F}$, $\mathbf{S}_A$, $\mathbf{S}_J$, and $\mathbf{N}$ are 3D arrays with dimension $L$x$N$x$T$ giving the fecundity, adult and juvenile survival and relative population density of each species $l$ at site $i$ at time $t$, computed from $K$x$L$ matrices $\beta_F$ and $\beta_S$ or regression coefficients for the submodels for each of species, and $L$x$L$ matrices $\mathbf{\alpha}_F$ and $\mathbf{\alpha}_S$ of density-dependence effects between specie. I.e. each element $\mathbf{\alpha}_{F_{l,l'}}$ gives the effect of the density of the population of species $l'$ on the log-fecundity of species $l$. Off-diagonal elements of $\mathbf{\alpha}_F$ and $\mathbf{\alpha}_S$  quantify fecundity- and survival-mediated interactions between species, whilst the diagonal elements quantify conspecific density-dependence.
 
 ##### Code
 
 Input:
+- `X`: a $N$x$K$ design matrix for vital rate regression sub-models
+- `beta_F`: a $K$x$L$ matrix of regression coefficients for log-fecundity for each species
+- `beta_S`: a $K$x$L$ matrix of regression coefficients for logit-survival for each species
+- `alpha_F`: a $K$x$K$ matrix of the intra- and inter-specific effects of population density on log-fecundity
+- `alpha_S`: a $K$x$K$ matrix of the intra- and inter-specific effects of population density on logit-survival
+- `gamma`: a (positive) vector of length $K$ for the differences in logit-survival betwen adults and juveniles for each species
 
 ```{r biotic_interactions}
+# matrix of weights for each lifestage to the population density of each species
+# (for density-dependence effects)
 
+A_t_function <- function(state, iter, log_F, logit_S, alpha_F, alpha_S, gamma, dd_weights) {
+  
+  # apply density-dependent effects
+  N <- state %*% dd_weights
+  log_F_t <-  base_log_F + N %*% alpha_F
+  logit_S_A_t <- base_logit_S + N %*% alpha_S
+  
+  # get vital rates for each site/species
+  F_t <- exp(log_F_t)
+  S_A_t <- ilogit(logit_S_A_t)
+  S_J_t <- ilogit(sweep(logit_S_A, 2, gamma, "-"))
+
+  # combine into a single matrix such that that each species has adjacent lifestages
+  top <- rbind(F_t * S_J_t, F_t * S_A_t)
+  bottom <- rbind(S_J_t, S_A_t)
+  dim(top) <- c(nrow(N), ncol(N) * 2)
+  dim(bottom) <- c(nrow(N), ncol(N) * 2)
+  A_t <- abind(top, bottom, along = 3)
+  A_t
+  
+}
+
+# weights matrix to aggregate stage-states for each species
+L <- length(gamma)
+dd_weights <- diag(L)[rep(1:L, each = M), ]
+
+iterations <- iterate_dynamic_matrix(
+  matrix_function = A_t_function, 
+  base_log_F = X %*% beta_F,
+  base_logit_S = X %*% beta_S,
+  alpha_F = alpha_F,
+  alpha_S = alpha_S,
+  gamma = gamma,
+  dd_weights = dd_weights
+)
+
+Lambda <- iterations$stable_population
 ```
-
 
 ## Evolutionary dynamics
 
@@ -458,7 +505,7 @@ In previous models, which assumed sites to be independent of one another with re
 
 By connecting the populations at all sites with immigration and emigration potential, we now have a single intrinsic growth rate for the entire population rather than for th eopulation at each site. Rather than computing the relative abundance at each site $\Lambda_i$ as a function of an intrinsic growth rate, we can instead sum stable stage distributions over the stages in each site to yeild a stable population distribution over sites. $\Lambda_i$ can therefore be computed as proportional (with constant $\alpha$) to this relative population size.
 
-In practice, the matrix $\mathbf{A}^*$ can be very sparse: the proportion of non-zero elements is $(M + N - 1) / (MN)$; as N increases, the proportion of non-zero approaches $1/M$. This sparsity can be increased further by setting an upper dispersal limit, beyond which $d_{j,i,i'}$ is set to zero, or by limiting the number of stages that can disperse. It is therefore computationally advantageous to compute the dominant eigenvector using sparse matrix methods, e.g. by iteration using sparse matrix multiplication.
+In practice, the matrix $\mathbf{A}^*$ can be very sparse: the proportion of non-zero elements is $(M + N - 1) / (MN)$; as N increases, the proportion of non-zero approaches $1/M$. This sparsity can be increased further by setting an upper dispersal limit, beyond which $d_{j,i,i'}$ is set to zero, or by limiting the number of stages that can disperse. It is therefore computationally advantageous to compute the dominant eigenvector using sparse matrix methods, e.g. by iteration using sparse matrix multiplication, as in the biotic interaction model.
 
 #### Notation
 
