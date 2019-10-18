@@ -89,17 +89,17 @@ Given a 3D array `A` with dimensions $N$x$M$x$M$, where $N$ is the number of sit
 
 ## Population dynamic model
 
-The transition matrix $\mathbf{A}_i$ describes the fundamental dynamics of the population at location $i$, with cells expressing the rates of transition from each stage at the previous timestep (columns) to each stage in the present time step (rows). Thus for each adult in the previous time step $F_i \cdot S_{Ai}$ juveniles are contributed to the population in the current time step: each adult survives with probability $S_{Ai}$, and produces an average of $F_i$ offspring, with the product of these giving the expected contribution per adult. For more details of matrix population models such as this, see [@caswellMatrixPopulationModels2001].
+The transition matrix $\mathbf{A}_i$ describes the fundamental dynamics of the population at location $i$, with cells expressing the rates of transition from each stage at the previous timestep (columns) to each stage in the present time step (rows). Thus for each adult in the previous time step $F_i \cdot S_{A_i}$ juveniles are contributed to the population in the current time step: each adult survives with probability $S_{A_i}$, and produces an average of $F_i$ offspring, with the product of these giving the expected contribution per adult. For more details of matrix population models such as this, see [@caswellMatrixPopulationModels2001].
 
 Each of these vital rates at each site $i$ is given by a linear model against a design matrix $\mathbf{X}_i$ representing environmental covariates, an intercept (coded as a column of all ones), and any transformations of those covariates
 
 ##### Notation
 
 \begin{align}
-\mathbf{A}_i &= \begin{bmatrix} F_i \cdot S_{Ji} & F_i \cdot S_{Ai} \\ S_{Ji} & S_{Ai}  \end{bmatrix} \\ \nonumber
+\mathbf{A}_i &= \begin{bmatrix} F_i \cdot S_{J_i} & F_i \cdot S_{A_i} \\ S_{J_i} & S_{A_i}  \end{bmatrix} \\ \nonumber
 ln(F_i) &= \mathbf{X}_i\beta_F \\ \nonumber
-logit(S_{Ai}) &= \mathbf{X}_i\beta_S \\ \nonumber
-logit(S_{Ji}) &= logit(S_{Ai}) - \gamma
+logit(S_{A_i}) &= \mathbf{X}_i\beta_S \\ \nonumber
+logit(S_{J_i}) &= logit(S_{A_i}) - \gamma
 \end{align}
 
 ##### Code
@@ -260,10 +260,10 @@ Density dependent vital rates can be incorporated in a DSDM by explicitly consid
 \begin{align}
 \Lambda_i &=  \mathbf{n}_{i, T} \\ \nonumber
 \mathbf{n}_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
-\mathbf{A}_{i,t+1} &= \begin{bmatrix} F_{i,t} \cdot S_{Ji,t} & F_{i,t} \cdot S_{Ai,t} \\ S_{Ji,t} & S_{Ai,t}  \end{bmatrix}  \\ \nonumber
-ln(F_{i,t}) &= \mathbf{X}_i \beta_F + \alpha_F \textstyle\sum_{j=1}^M{\mathbf{n}_{i,t,j}}\\ \nonumber
-logit(S_{Ai,t}) &= \mathbf{X}_i \beta_S + \alpha_S \textstyle\sum_{j=1}^M{\mathbf{n}_{i,t,j}} \\ \nonumber
-logit(S_{Ji,t}) &= logit(S_{Ai,t}) - \gamma
+\mathbf{A}_{i,t+1} &= \begin{bmatrix} F_{i,t} \cdot S_{J_{i,t}} & F_{i,t} \cdot S_{A_{i,t}} \\ S_{J_{i,t}} & S_{A_{i,t}}  \end{bmatrix}  \\ \nonumber
+ln(F_{i,t}) &= \mathbf{X}_i \beta_F + \alpha_F \textstyle\sum_{j=1}^M{\mathbf{n}_{i,j,t}}\\ \nonumber
+logit(S_{A_{i,t}}) &= \mathbf{X}_i \beta_S + \alpha_S \textstyle\sum_{j=1}^M{\mathbf{n}_{i,j,t}} \\ \nonumber
+logit(S_{J_{i,t}}) &= logit(S_{A_{i,t}}) - \gamma
 \end{align}
 
 ##### Code
@@ -329,10 +329,10 @@ y_{i,t} &\sim Bernoulli(p_{i,t}) \\ \nonumber
 p_{i,t} &= 1 - e^{-\Lambda_{i,t}} \\ \nonumber
 \Lambda_{i,t} &=  \mathbf{n}_{i,t} \\ \nonumber
 \mathbf{n}_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
-\mathbf{A}_{i,t+1} &= \begin{bmatrix} F_{i,t} \cdot S_{Ji,t} & F_{i,t} \cdot S_{Ai,t} \\ S_{Ji,t} & S_{Ai,t}  \end{bmatrix}  \\ \nonumber
-ln(F_{i,t}) &= \mathbf{X}_{i,t} \beta_F + \alpha_F \textstyle\sum_{j=1}^M{\mathbf{n}_{i,t,j}}\\ \nonumber
-logit(S_{Ai,t}) &= \mathbf{X}_{i,t} \beta_S + \alpha_S \textstyle\sum_{j=1}^M{\mathbf{n}_{i,t,j}} \\ \nonumber
-logit(S_{Ji,t}) &= logit(S_{Ai,t}) - \gamma
+\mathbf{A}_{i,t+1} &= \begin{bmatrix} F_{i,t} \cdot S_{J_{i,t}} & F_{i,t} \cdot S_{A_{i,t}} \\ S_{J_{i,t}} & S_{A_{i,t}}  \end{bmatrix}  \\ \nonumber
+ln(F_{i,t}) &= \mathbf{X}_{i,t} \beta_F + \alpha_F \textstyle\sum_{j=1}^M{\mathbf{n}_{i,j,t}}\\ \nonumber
+logit(S_{A_{i,t}}) &= \mathbf{X}_{i,t} \beta_S + \alpha_S \textstyle\sum_{j=1}^M{\mathbf{n}_{i,j,t}} \\ \nonumber
+logit(S_{J_{i,t}}) &= logit(S_{A_{i,t}}) - \gamma
 \end{align}
 
 Note that this notation is very similar to the density-dependent vital rate model, except that both the observation model (the first three lines) and the design matrix $\mathbf{X}$ are temporally-indexed, and the relative abundances $\Lambda_{i,t}$ are given by the contemporary population sizes, not the terminal sizes.
@@ -389,15 +389,66 @@ distribution(y) <- bernoulli(p)
 
 # Population dynamic models
 
+## Species with complex demography
+
+<illustrate that any species for which a transition matrix can be formed can be modelled with a DSDM- at least to illustrate that multiple life stages can be considered.>
+
 ## Integral projection models
 
-<to do, need to package up inteegration code into greta.dynamics?>
+<to do, need to package up integration code into greta.dynamics?>
 
 ## Biotic interactions
 
-<to do, just add multiple life stages>
+Simultaneous demographic species distribution modelling of multiple species can be achieved by replacing the population transition matrices at each site $\mathbf{A}_i$ with a block-diagonal matrix comprising the population transition matrices for all the species of interest in the diagonal blocks. For a two-species model $\mathbf{A}_i$ therefore has dimension $(M1+M2)$x$(M1+M2)$, where $M1$ and $M2$ are the number of life stages for species 1 and 2 respectively. Since an individual can neither change species or produce offspring of another species, the off-diagonal blocks are all zero. Interactions between these species can be encoded in density-dependent vital rates, with the density of both conspecific and intraspecific populations having an impact.
 
-Need iternatactions to be via density-dependent effects, because we can't have negative elements in the matrix?
+
+##### Notation
+
+\begin{align}
+\Lambda_{i,l} &= \mathbf{N}_{l,i,T} \\ \nonumber
+\mathbf{n}_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
+\mathbf{A}_{i,t+1} &= \begin{bmatrix} \mathbf{A}_{1,i,t+1} & & \dots & & 0 \\
+& \ddots & & & \\
+\vdots & & \mathbf{A}_{l,i,t+1} & & \vdots \\
+& & & \ddots & \\
+0 & & \dots & & \mathbf{A}_{L,i,t+1} \end{bmatrix} \\ \nonumber
+\mathbf{A}_{l,i,t+1} &= \begin{bmatrix} F_{l,i,t} \cdot S_{J_{l,i,t}} & F_{l,i,t} \cdot S_{A_{l,i,t}} \\ S_{J_{l,i,t}} & S_{A_{l,i,t}}  \end{bmatrix}  \\ \nonumber
+ln(F_{l,i,t}) &= \mathbf{X}_i \beta_{F_l} + \textstyle\sum_{l'=1}^{L}{\alpha_{F_{l,l'}} \mathbf{N}_{l',i,t}}\\ \nonumber
+logit(S_{A_{l,i,t}}) &= \mathbf{X}_i \beta_{S_l} + \textstyle\sum_{l'=1}^{L}{\alpha_{S_{l,l'}} \mathbf{N}_{l',i,t}}\\ \nonumber
+logit(S_{J_{l,i,t}}) &= logit(S_{A_{l,i,t}}) - \gamma_l \\ \nonumber
+\mathbf{N}_{l,i,t} &= \textstyle\sum_{j=1+(l - 1)}^{lM}{\mathbf{n}_{i,j,t}}
+\end{align}
+
+
+##### Code
+
+Input:
+
+```{r biotic_interactions}
+
+```
+
+
+## Evolutionary dynamics
+
+As in the biotic interactions, model different genotypes with a separate set of life stages, but fecundity in off-diagonal blocks gives the probability of the offspring having a different genotype to the parent. Different genotypes can therefore have different vital rates.
+
+How to get separate abundances? intrinsic growth rate-derived abundance, multiplied by relative abundance of each of the genotypes.
+
+##### Notation
+
+\begin{align}
+a
+\end{align}
+
+
+##### Code
+
+Input:
+
+```{r evolutionary_dynamics}
+
+```
 
 ## Dispersal with a static transition matrix
 
@@ -448,7 +499,6 @@ analysis <- iterate_matrix(
 
 Lambda <- alpha * analysis$stable_abundance_distribution
 ```
-
 
 ## Dispersal with dynamic transition matrix
 
