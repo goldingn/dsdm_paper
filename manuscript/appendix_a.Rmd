@@ -193,15 +193,15 @@ Lambda <- lambda * alpha
 
 Both the Ricker and Beverton-Holt approaches to the abundance relationship assume that the carrying capacity can be expressed as some function of the intrinsic growth rate. This is convenient since the intrinsic growth rate is a well-studied and simple to compute quantity of a temporally-static transition matrix $A_i$. However, a more ecologically realistic approach is to explicitly model the vital rates as being density-dependent - that is having the survival probabilities or fecundity rates at a given time point depend on the population density at the previous time point. This enables incorporation of more detailed ecological knowledge about how vital rates drive abundance, which may be important to consider if the answer to the ecological question of interest depends on density dependence.
 
-Density dependent vital rates can be incorporated in a DSDM by explicitly considering a vector $\mathbf{n}_{i,t}$ of population densities for each of $m$ life stages (indexed with $j$) at site $i$, at time $t$. $\mathbf{n}_{i,t}$ is evolved through time by multiplication against a timepoint-specific transition matrix $\mathbf{A}_{i,t}$, contructed of timepoint-specific vital rates that depend on the total population density (i.e. across all life stages $m$) in the previous time point $\mathbf{N}_{i,t}$. For example, these density-dependent relationships could be a linear function of population density (controlled by parameters $\alpha_F$ and $\alpha_S$) on the link-scale of the vital rates. Since the transition matrix is no longer temporally-static, the population dynamics cannot be summarised by a population growth rate. Instead, iteration of the matrix using the density-dependent vital rate functions causes the vector $\mathbf{n}_{i,t}$ of population densities to converge on a static value after a sufficient number of iterations, $T$. This terminal density can be used directly as the relative abundance. As in the basic DSDM, the parameters $\alpha_F$ and $\alpha_S$ control both density-dependence and the detection rate, since these two processes cannot be differentiated without population growth data.
+Density dependent vital rates can be incorporated in a DSDM by explicitly considering a vector $\mathbf{n}_{i,t}$ of population densities for each of $M$ life stages (indexed with $j$) at site $i$, at time $t$. $\mathbf{n}_{i,t}$ is evolved through time by multiplication against a timepoint-specific transition matrix $\mathbf{A}_{i,t}$, contructed of timepoint-specific vital rates that depend on the total population density (i.e. across all life stages $M$) in the previous time point $\mathbf{N}_{i,t}$. For example, these density-dependent relationships could be a linear function of population density (controlled by parameters $\alpha_F$ and $\alpha_S$) on the link-scale of the vital rates. Since the transition matrix is no longer temporally-static, the population dynamics cannot be summarised by a population growth rate. Instead, iteration of the matrix using the density-dependent vital rate functions causes the vector $\mathbf{n}_{i,t}$ of population densities to converge on a static value after a sufficient number of iterations, $T$. This terminal density can be used directly as the relative abundance. As in the basic DSDM, the parameters $\alpha_F$ and $\alpha_S$ control both density-dependence and the detection rate, since these two processes cannot be differentiated without population growth data.
 
 Notation:
 \begin{align}
 \Lambda_i &=  \mathbf{n}_{i, T} \\ \nonumber
 \mathbf{n}_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
 \mathbf{A}_{i,t+1} &= \begin{bmatrix} F_{i,t} \cdot S_{Ji,t} & F_{i,t} \cdot S_{Ai,t} \\ S_{Ji,t} & S_{Ai,t}  \end{bmatrix}  \\ \nonumber
-ln(F_{i,t}) &= \mathbf{X}_i \beta_F + \alpha_F \textstyle\sum_{j=1}^m{\mathbf{n}_{i,t,j}}\\ \nonumber
-logit(S_{Ai,t}) &= \mathbf{X}_i \beta_S + \alpha_S \textstyle\sum_{j=1}^m{\mathbf{n}_{i,t,j}} \\ \nonumber
+ln(F_{i,t}) &= \mathbf{X}_i \beta_F + \alpha_F \textstyle\sum_{j=1}^M{\mathbf{n}_{i,t,j}}\\ \nonumber
+logit(S_{Ai,t}) &= \mathbf{X}_i \beta_S + \alpha_S \textstyle\sum_{j=1}^M{\mathbf{n}_{i,t,j}} \\ \nonumber
 logit(S_{Ji,t}) &= logit(S_{Ai,t}) - \gamma
 \end{align}
 
@@ -258,8 +258,8 @@ p_{i,t} &= 1 - e^{-\Lambda_{i,t}} \\ \nonumber
 \Lambda_{i,t} &=  \mathbf{n}_{i,t} \\ \nonumber
 \mathbf{n}_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
 \mathbf{A}_{i,t+1} &= \begin{bmatrix} F_{i,t} \cdot S_{Ji,t} & F_{i,t} \cdot S_{Ai,t} \\ S_{Ji,t} & S_{Ai,t}  \end{bmatrix}  \\ \nonumber
-ln(F_{i,t}) &= \mathbf{X}_{i,t} \beta_F + \alpha_F \textstyle\sum_{j=1}^m{\mathbf{n}_{i,t,j}}\\ \nonumber
-logit(S_{Ai,t}) &= \mathbf{X}_{i,t} \beta_S + \alpha_S \textstyle\sum_{j=1}^m{\mathbf{n}_{i,t,j}} \\ \nonumber
+ln(F_{i,t}) &= \mathbf{X}_{i,t} \beta_F + \alpha_F \textstyle\sum_{j=1}^M{\mathbf{n}_{i,t,j}}\\ \nonumber
+logit(S_{Ai,t}) &= \mathbf{X}_{i,t} \beta_S + \alpha_S \textstyle\sum_{j=1}^M{\mathbf{n}_{i,t,j}} \\ \nonumber
 logit(S_{Ji,t}) &= logit(S_{Ai,t}) - \gamma
 \end{align}
 
@@ -312,8 +312,56 @@ Given: `X_list` a list of length $T$ of design matrices for each of the time poi
 
 <to do, just add multiple life stages>
 
-## Dispersal
+Need iternatactions to be via density-dependent effects, because we can't have negative elements in the matrix?
+
+## Dispersal with a static transition matrix
+
+Dispersal of individuals between sites can be incorporated by expanding the matrix population model to simultaneously consider populations in all patches, with dispersal between patches quantified by a dispersal kernel.
+
+In previous models, which assumed sites to be independent of one another with respect to their population dynamics, the 3D $N$x$M$x$M$ array $A$ contained the $M$x$M$ transition matrices $\mathbf{A}_i$ for each of the $N$ sites $i$. To consider interacting population dynamics across sites, we instead consider a single, larger transition matrix $\mathbf{A}^*$ with dimension $NM$x$NM$, with a symmetric blocked structure. The the $i$^{th} block-diagonal element of $\mathbf{A}^*$ is the site-specific $M$x$M$ population transition matrix $\mathbf{A}_i$ and the off-diagonal blocks are $M$x$M$ diagonal matrices with diagonal entries giving the probability $d_{j,i,i'}$ that an individual of life stage $j$ in site $i$ will move to site $i'$ in this timestep. $d_{j,i,i'}$ is computed using a dispersal kernel (an exponential kernel in this example) with stage-specific dispersal ability parameter $\tau_j$, standardised to sum to 1 over the study area and ensure $d_{j,i,i'}$ is a valid probability.
+
+By connecting the populations at all sites with immigration and emigration potential, we now have a single intrinsic growth rate for the entire population rather than for th eopulation at each site. Rather than computing the relative abundance at each site $\Lambda_i$ as a function of an intrinsic growth rate, we can instead sum stable stage distributions over the stages in each site to yeild a stable population distribution over sites. $\Lambda_i$ can therefore be computed as proportional (with constant $\alpha$) to this relative population size.
+
+In practice, the matrix $\mathbf{A}^*$ can be very sparse: the proportion of non-zero elements is $(M + N - 1) / (MN)$; as N increases, the proportion of non-zero approaches $1/M$. This sparsity can be increased further by setting an upper dispersal limit, beyond which $d_{j,i,i'}$ is set to zero, or by limiting the number of stages that can disperse. It is therefore computationally advantageous to compute the dominant eigenvector using sparse matrix methods, such as cumputtion by iteration using sparse matrix multiplication.
+
+Notation:
+\begin{align}
+\Lambda_i &= \alpha v_i / \textstyle\sum_{i=1}^{N}{v_{i}} \\ \nonumber
+v_i &= \textstyle\sum_{j=1}^{M}{v^*_{j+(i-1)}} \\ \nonumber
+v^* &= eigvec(\mathbf{A}^*) \\ \nonumber
+\mathbf{A}^* &= \begin{bmatrix} \mathbf{A}_1 & \mathbf{M}_{1,2} & \dots & \mathbf{M}_{1,i'} & \dots & \mathbf{M}_{1,N}\\
+\mathbf{M}_{2,1} & \mathbf{A}_2 & \dots & \mathbf{M}_{2,i'} & \dots & \mathbf{M}_{2,N} \\
+\vdots & \vdots & \ddots & \vdots & &  \vdots \\
+\mathbf{M}_{i,1} & \mathbf{M}_{i,2} & \dots & \mathbf{A}_i & \dots & \mathbf{M}_{i,N} \\
+\vdots & \vdots &  & \vdots & \ddots & \vdots \\
+\mathbf{M}_{N,1} & \mathbf{M}_{N,2} & \dots & \mathbf{M}_{N,i'} & \dots & \mathbf{A}_N \end{bmatrix} \\ \nonumber
+\mathbf{M}_{i,i'} &= diag(d_{1,i,i'}, \dots, d_{j,i,i'}, \dots, d_{M,i,i'}) \\ \nonumber
+d_{j,i,i'} &= d^*_{j,i,i'} / \textstyle\sum_{i=1}^Nd^*_{j,i,i'} \\ \nonumber
+d^*_{j,i,i'} &=  e^{-\tau_j \mathbf{D}_{i,i'}}
+\end{align}
+
+Code:
+
+
+## Dispersal with density-dependent vital rates
 
 <to do, two matrix multiplications (mention sparsity) can only be done with density-dependent vital rates>
+
+Or do it with static analysis and stable size distribution for relative abundances?
+
+
+The order of the dispersal and population transition iterations can be reversed if pre-breeding migration is required.
+
+Notation:
+\begin{align}
+\mathbf{n}_{j,t+1} &= \mathbf{M}_j \mathbf{n}^*_{j,t} \\ \nonumber
+\mathbf{n}^*_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t}
+\mathbf{M}_j &= exp(-\tau_j \mathbf{D})
+\end{align}
+
+
+
+Code:
+
 
 # References
