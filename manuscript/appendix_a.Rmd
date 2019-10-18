@@ -426,6 +426,7 @@ where $\mathbf{F}$, $\mathbf{S}_A$, $\mathbf{S}_J$, and $\mathbf{N}$ are 3D arra
 ##### Code
 
 Input:
+
 - `X`: a $N$x$K$ design matrix for vital rate regression sub-models
 - `beta_F`: a $K$x$L$ matrix of regression coefficients for log-fecundity for each species
 - `beta_S`: a $K$x$L$ matrix of regression coefficients for logit-survival for each species
@@ -434,22 +435,16 @@ Input:
 - `gamma`: a (positive) vector of length $K$ for the differences in logit-survival betwen adults and juveniles for each species
 
 ```{r biotic_interactions}
-# matrix of weights for each lifestage to the population density of each species
-# (for density-dependence effects)
-
 A_t_function <- function(state, iter, log_F, logit_S, alpha_F, alpha_S, gamma, dd_weights) {
   
-  # apply density-dependent effects
   N <- state %*% dd_weights
   log_F_t <-  base_log_F + N %*% alpha_F
   logit_S_A_t <- base_logit_S + N %*% alpha_S
   
-  # get vital rates for each site/species
   F_t <- exp(log_F_t)
   S_A_t <- ilogit(logit_S_A_t)
   S_J_t <- ilogit(sweep(logit_S_A, 2, gamma, "-"))
 
-  # combine into a single matrix such that that each species has adjacent lifestages
   top <- rbind(F_t * S_J_t, F_t * S_A_t)
   bottom <- rbind(S_J_t, S_A_t)
   dim(top) <- c(nrow(N), ncol(N) * 2)
