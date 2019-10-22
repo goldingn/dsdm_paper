@@ -164,13 +164,13 @@ Where the negative binomial is parameterised in terms of dispersion parameter $r
 
 Input:
 
-- `size`: a (positive) scalar giving the dispersion parameter of the negative binomial distribution
+- `r`: a (positive) scalar giving the dispersion parameter of the negative binomial distribution (equivalent to the `size` argument of `stats::dnbinom()`)
 - `Lambda`: a (positive) vector of the relative abundances for each observation
 - `y`: a vector of (non-negative) integers encoding count observations
 
 ```{r negbin_obs}
-prob <- size / (size + Lambda)
-distribution(y) <- negative_binomial(size, prob)
+p <- r / (r + Lambda)
+distribution(y) <- negative_binomial(r, p)
 ```
 
 
@@ -613,7 +613,7 @@ Lambda <- iterations$stable_population
 
 ## Evolutionary dynamics
 
-Similarly to the biotic interactions model, we can consider a population of single species but with $L$ different genotypes with a blocked transition matrix. In this model, the genotypes are linked via reproduction rather than density-dependent vital rates. The $L$x$L$ matrix $\mathbf{m}$ quantifies mutation rates between different genotypes. For an individual of genotype $l$, each of its offspring has probability $\mathbf{m}_{l,l'}$ of being of genotype $l'$. Each genotype has its own vital rate sub-models, representing a linked phenotype driving population dynamics for that genotype. By analysing the combined transition matrix $\mathbf{A}^*_i$ at each site $i$ with different environmental covariates, the model can consider how selection for each genotype varies across the environment, and predict the genetic makeup of populations.
+Similarly to the biotic interactions model, we can consider a population of single species but with $L$ different genotypes with a blocked transition matrix. In this model, the genotypes are linked via reproduction rather than density-dependent vital rates. The $L$x$L$ matrix $\mathbf{m}$ quantifies mutation rates between different genotypes. For an individual of genotype $l$, each of its offspring has probability $\mathbf{m}_{l,l'}$ of being of genotype $l'$. Each genotype has its own vital rate sub-models, representing a linked phenotype driving population dynamics for that genotype. By analysing the combined transition matrix $\mathbf{A}^*_i$ at each site $i$ with different environmental covariates, the model can consider how selection for each genotype varies across the environment, and predict the genetic makeup of populations. Note that this is just one approach to considering multiple genotypes and natural selection in a matrix population model, see e.g. [@devriesSelectionTwosexStagestructured2019].
 
 This model is compatible with both static and dynamic transition matrices. In the static case, the expected abundance $\Lambda_{l,i}$ of each genotype $l$ at each site $i$ can computed by the product of the expected total abundance $\Lambda^*_i$ (computed via an abundance model as in the basic model) and the stable distribution of genotypes, calculated by summing the dominant eigenvector over the stages in each genotype and standardising to sum to one. In the dynamic case relative abundances can be calculated in the same way as for the biotic interaction model.
 
