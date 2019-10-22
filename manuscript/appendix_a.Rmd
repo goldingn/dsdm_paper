@@ -26,14 +26,17 @@ knitr::opts_chunk$set(message = FALSE,
 
 This appendix provides statistical notation and computer code for the R packages greta and greta.dynamics [@goldingGretaDynamicsModelling2019; @goldingGretaSimpleScalable2019] to implement the broad range of DSDMs proposed in the manuscript *Demographic Species Distribution Models* by Nick Golding.
 
-Each section below details a modelling option for a specific component of the DSDM - the observation model, aundance model, or population dynamic model. These components are largely interoperable; a user can pick one modelling option from each category that best fits the ecology of the species of interest and the eoclogical question at hand. The one exception to this is that abundance models using as input the intrinsic growth rate of the species (the Beverton-Holt model in the manuscript example, and the Ricker model introduced here) cannot be used in combination with the population dynamic models that have either dynamic transition matrices or dispersal, since these models do not yield a separate intrinsic growth rate for each site. With these models, the relative abundance is instead calculated directly from the dynamics, so these abundance models are not needed.
+Each section below details a modelling option for a specific component of the DSDM - the observation model, abundance model, or population dynamic model. These components are largely inter-operable; a user can pick one modelling option from each category that best fits the ecology of the species of interest and the ecological question at hand. The one exception to this is that abundance models using as input the intrinsic growth rate of the species (the Beverton-Holt model in the manuscript example, and the Ricker model introduced here) cannot be used in combination with the population dynamic models that have either dynamic transition matrices or dispersal, since those population dynamic models do not yield a separate intrinsic growth rate for each site. With those models, the relative abundance is instead calculated directly from the dynamics, so these abundance models are not needed.
+
+This appendix only considers the structures of the proposed models, specification of priors for parameters in the models are not discussed here. See [@goldingGretaSimpleScalable2019] and the website [greta-stats.org](https://greta-stats.org) for general guidance on how to build models with greta. I reiterate here that the aim of DSDMs is to incorporate ecological knowledge via informative priors, and the parameters of the proposed models are unlikely to be identified with uninformative priors.
 
 Note that statistical notation is written in the standard way with the first line giving the sampling distribution, and subsequent lines defining the variables on which previous lines depend, however the code uses the reverse order since in greta variables must be defined before they can be used to create other variables.
 
+
+
 # Basic DSDM
 
-For ease of reference, I repeat here the equations and interpretation for the basic presence-absence DSDM presented in the main manuscript. It presents the model in its three parts, each of which can be modified independently. Specification of priors for parameters in the model are not discussed here. See [@goldingGretaSimpleScalable2019] and the website [greta-stats.org](https://greta-stats.org) for general guidance on how to build models with greta.
-
+For ease of reference, I repeat here the equations and interpretation for the basic presence-absence DSDM presented in the main manuscript. It presents the model in its three parts, each of which can be modified independently. 
 ## Observation model
 
 The observation model for the basic DSDM relates the species' relative abundance (I.e. assumed to be within a multiplicative constant of the true abundance) $\Lambda_i$ at site $i$ to the probability of (observed) presence $p_i$ during a single presence-absence survey, and the presence-absence data are assumed to be independently Bernoulli-distributed following these probabilities as in a presence-absence species distribution model.
@@ -57,8 +60,6 @@ p <- 1 - exp(-Lambda)
 distribution(y) <- bernoulli(p)
 ```
 
-Given vectors `Lambda` and `y` each with length $N$, the number of sites.
-
 ## Abundance model
 
 The abundance model relates the transition matrix $\mathbf{A}_i$ of the population at site $i$ to the relative abundance $\Lambda_i$. The intrinsic growth rate $\lambda_i$ of the population is used to compute the theoretical carrying capacity $K_i$ according to the Beverton-Holt model, with competition effect parameter $\alpha$. This theoretical carrying capacity is negative when $\lambda_i < 1$, so it is rectified by the softplus function to always yield a positive abundance $\Lambda_i$, which is close to zero when $\lambda_i < 1$, and approximately equal to $K_i$ when $\lambda_i > 1$.
@@ -76,7 +77,7 @@ K_i &= (\lambda_i - 1) \alpha \\ \nonumber
 Input:
 
 - `A`: an $N$x$M$x$M$ array containing the $M$x$M$ transition matrices for all sites
-- `alpha`: a (positive) scalar for the combind effect of imperfect detection and density dependence
+- `alpha`: a (positive) scalar for the combined effect of imperfect detection and density dependence
 
 ```{r basic_abundance}
 analysis <- iterate_matrix(A)
@@ -85,11 +86,9 @@ K <- (lambda - 1) * alpha
 Lambda <- log1pe(K)
 ```
 
-Given a 3D array `A` with dimensions $N$x$M$x$M$, where $N$ is the number of sites, and $M$ the number of life stages in the population model (dimension of the matrices $\mathbf{A}_i$), and `alpha` is a scalar. When used with its default settings the function `greta.dynamics::iterate_matrix()` returns, among other quantities, a vector of intrinsic growth rates of the matrices in `A` computed by repeated iteration of the matrix
-
 ## Population dynamic model
 
-The transition matrix $\mathbf{A}_i$ describes the fundamental dynamics of the population at location $i$, with cells expressing the rates of transition from each stage at the previous timestep (columns) to each stage in the present time step (rows). Thus for each adult in the previous time step $F_i \cdot S_{A_i}$ juveniles are contributed to the population in the current time step: each adult survives with probability $S_{A_i}$, and produces an average of $F_i$ offspring, with the product of these giving the expected contribution per adult. For more details of matrix population models such as this, see [@caswellMatrixPopulationModels2001].
+The transition matrix $\mathbf{A}_i$ describes the fundamental dynamics of the population at location $i$, with cells expressing the rates of transition from each stage at the previous time step (columns) to each stage in the present time step (rows). Thus for each adult in the previous time step $F_i \cdot S_{A_i}$ juveniles are contributed to the population in the current time step: each adult survives with probability $S_{A_i}$, and produces an average of $F_i$ offspring, with the product of these giving the expected contribution per adult. For more details of matrix population models such as this, see [@caswellMatrixPopulationModels2001].
 
 Each of these vital rates at each site $i$ is given by a linear model against a design matrix $\mathbf{X}_i$ representing environmental covariates, an intercept (coded as a column of all ones), and any transformations of those covariates
 
@@ -109,7 +108,7 @@ Input:
 - `X`: a $N$x$K$ design matrix for vital rate regression sub-models
 - `beta_F`: a vector of length $K$ of regression coefficients for log-fecundity
 - `beta_s`: a vector of length $K$ of regression coefficients for logit-survival
-- `gamma`: a (positive) scalar for the difference in logit-survival betwen adults and juveniles
+- `gamma`: a (positive) scalar for the difference in logit-survival between adults and juveniles
 
 ```{r basic_transition}
 log_F <- X %*% beta_F
@@ -123,15 +122,13 @@ bottom <- cbind(S_J, S_A)
 A <- abind(top, bottom, along = 3)
 ```
 
-Given an $N$x$K$ matrix `X`, length $K$ vectors `beta_S` and `beta_F`, and a scalar `gamma`, where $N$ is the number of sites and $K$ the number of columns (covariates plus an intercept) of the design matrix.
-
 # Observation models
 
-Below I provide alternative observation models for count, and presence-only data. occupancy detection observation models can be implemnted using other greta extension packages, but are byond the scope of this manuscript.
+Below I provide alternative observation models for count, and presence-only data. occupancy detection observation models can be implemented using other greta extension packages, but are beyond the scope of this manuscript.
 
 ## Poisson count data
 
-The relative abundance variable $Lambda_i$ is the parameter of the poisson distribution, so a poisson count model is simply given by:
+The relative abundance variable $Lambda_i$ is the parameter of the Poisson distribution, so a Poisson count model is simply given by:
 
 ##### Notation
 
@@ -152,7 +149,7 @@ distribution(y) <- poisson(Lambda)
 
 ## Negative binomial count data
 
-Where count data are overdispersed with respect to the expected counts $\Lambda_i$, this overdispersion can be modelled with a negative binomial distribution as:
+Where count data are over-dispersed with respect to the expected counts $\Lambda_i$, this over-dispersion can be modelled with a negative binomial distribution as:
 
 ##### Notation
 
@@ -167,20 +164,20 @@ Where the negative binomial is parameterised in terms of dispersion parameter $r
 
 Input:
 
-- `r`: a (positive) scalar giving the dispersion parameter of the negative binomial distribution
+- `size`: a (positive) scalar giving the dispersion parameter of the negative binomial distribution
 - `Lambda`: a (positive) vector of the relative abundances for each observation
 - `y`: a vector of (non-negative) integers encoding count observations
 
 ```{r negbin_obs}
-p <- r / (r + Lambda)
-distribution(y) <- negative_binomial(r, p)
+prob <- size / (size + Lambda)
+distribution(y) <- negative_binomial(size, prob)
 ```
-Given a positive scalar `r`, and where y is a vector of counts. `r` and `p` correspond to the `size` and `prob` arguments of `stats::dnbinom` in R.
+
 
 ## Presence-only data
 
-Presence-only data - where records consist of locations where the species has been reported as being present - can be considered as a thinned, inhomogenous Poisson point process [@wartonPoissonPointProcess2010;@rennerPointProcessModels2015]. The likelihood for this model comprises an intractable integral over the study area, which can be approximated in a number of ways that reduce the model to having a Poisson observation model. Here I apply the piecewise constant approximation, defininthe observations $y_i$ to be counts of occurrence records in each cell $i$, having area $a_i$, where the cells represent a partition of the study area [@diggleSpatialSpatioTemporalLogGaussian2013;@simpsonGoingGridComputationally2011]. That is they tesselate (but do not overlap) and together cover the entire study area.
-Under this definition, the DSDM relative abundance parameter $\Lambda_i$ represents a density of point observations per unit area (assumed to be homogenous across cell $i$) that *would* be seen if there were no spatial bias in rates of reporting. The expected number of presence-only observations in each cell is therefore the product of the relative abundance $\Lambda_i$, the area $a_i$, and a relative measure of the bias in reporting, $\tau_i$ (also assumed homogenous across each cell). Values of $\tau_i$ for each location can be provided as data, or estimated during model-fitting via an additional regression submodel against detection covariates. Since $\Lambda_i$ is only identified to within a multiplicative constant ($\alpha$ in Equation 2), the absolute value of $\tau_i$ is not identified in this model, so any model for $\tau_i$ should probably not have an intercept term. 
+Presence-only data - where records consist of locations where the species has been reported as being present - can be considered as a thinned, inhomogenous Poisson point process [@wartonPoissonPointProcess2010;@rennerPointProcessModels2015]. The likelihood for this model comprises an intractable integral over the study area, which can be approximated in a number of ways that reduce the model to having a Poisson observation model. Here I apply the piece-wise constant approximation, defining the observations $y_i$ to be counts of occurrence records in each cell $i$, having area $a_i$, where the cells represent a partition of the study area [@diggleSpatialSpatioTemporalLogGaussian2013;@simpsonGoingGridComputationally2011]. That is they tessellate (but do not overlap) and together cover the entire study area.
+Under this definition, the DSDM relative abundance parameter $\Lambda_i$ represents a density of point observations per unit area (assumed to be homogeneous across cell $i$) that *would* be seen if there were no spatial bias in rates of reporting. The expected number of presence-only observations in each cell is therefore the product of the relative abundance $\Lambda_i$, the area $a_i$, and a relative measure of the bias in reporting, $\tau_i$ (also assumed homogeneous across each cell). Values of $\tau_i$ for each location can be provided as data, or estimated during model-fitting via an additional regression sub-model against detection covariates. Since $\Lambda_i$ is only identified to within a multiplicative constant ($\alpha$ in Equation 2), the absolute value of $\tau_i$ is not identified in this model, so any model for $\tau_i$ should probably not have an intercept term. 
 
 ##### Notation
 
@@ -221,7 +218,6 @@ p <- 1 - exp(-Lambda[pa_locations])
 distribution(y_pa) <- bernoulli(p)
 distribution(y_count) <- poisson(alpha_count * Lambda[count_locations])
 ```
-Where `pa_locations` and `count_locations` are numeric indices to the sites with to presence-absence and count data respectively, and `y_pa` and `y_count` are the corresponding vectors of observed data.
 
 # Abundance models
 
@@ -241,7 +237,7 @@ The abundance relationship in the DSDM presented in the manuscript derives from 
 Input:
 
 - `A`: an $N$x$M$x$M$ array containing the $M$x$M$ transition matrices for all sites
-- `alpha`: a (positive) scalar for the combind effect of imperfect detection and density dependence
+- `alpha`: a (positive) scalar for the combined effect of imperfect detection and density dependence
 
 ```{r ricker_abundance}
 analysis <- iterate_matrix(A)
@@ -253,7 +249,7 @@ Lambda <- lambda * alpha
 
 Both the Ricker and Beverton-Holt approaches to the abundance relationship assume that the carrying capacity can be expressed as some function of the intrinsic growth rate. This is convenient since the intrinsic growth rate is a well-studied and simple to compute quantity of a temporally-static transition matrix $A_i$. However, a more ecologically realistic approach is to explicitly model the vital rates as being density-dependent - that is having the survival probabilities or fecundity rates at a given time point depend on the population density at the previous time point. This enables incorporation of more detailed ecological knowledge about how vital rates drive abundance, which may be important to consider if the answer to the ecological question of interest depends on density dependence.
 
-Density dependent vital rates can be incorporated in a DSDM by explicitly considering a vector $\mathbf{n}_{i,t}$ of population densities for each of $M$ life stages (indexed with $j$) at site $i$, at time $t$. $\mathbf{n}_{i,t}$ is evolved through time by multiplication against a timepoint-specific transition matrix $\mathbf{A}_{i,t}$, contructed of timepoint-specific vital rates that depend on the total population density (i.e. across all life stages $M$) in the previous time point $\mathbf{N}_{i,t}$. For example, these density-dependent relationships could be a linear function of population density (controlled by parameters $\alpha_F$ and $\alpha_S$) on the link-scale of the vital rates. Since the transition matrix is no longer temporally-static, the population dynamics cannot be summarised by a population growth rate. Instead, iteration of the matrix using the density-dependent vital rate functions causes the vector $\mathbf{n}_{i,t}$ of population densities to converge on a static value after a sufficient number of iterations, $T$. This terminal density can be used directly as the relative abundance. As in the basic DSDM, the parameters $\alpha_F$ and $\alpha_S$ control both density-dependence and the detection rate, since these two processes cannot be differentiated without population growth data.
+Density dependent vital rates can be incorporated in a DSDM by explicitly considering a vector $\mathbf{n}_{i,t}$ of population densities for each of $M$ life stages (indexed with $j$) at site $i$, at time $t$. $\mathbf{n}_{i,t}$ is evolved through time by multiplication against a time-point-specific transition matrix $\mathbf{A}_{i,t}$, constructed of time-point-specific vital rates that depend on the total population density (i.e. across all life stages $M$) in the previous time point $\mathbf{N}_{i,t}$. For example, these density-dependent relationships could be a linear function of population density (controlled by parameters $\alpha_F$ and $\alpha_S$) on the link-scale of the vital rates. Since the transition matrix is no longer temporally-static, the population dynamics cannot be summarised by a population growth rate. Instead, iteration of the matrix using the density-dependent vital rate functions causes the vector $\mathbf{n}_{i,t}$ of population densities to converge on a static value after a sufficient number of iterations, $T$. This terminal density can be used directly as the relative abundance. As in the basic DSDM, the parameters $\alpha_F$ and $\alpha_S$ control both density-dependence and the detection rate, since these two processes cannot be differentiated without population growth data.
 
 ##### Notation
 
@@ -275,7 +271,7 @@ Input:
 - `beta_s`: a vector of length $K$ of regression coefficients for logit-survival
 - `alpha_F`: a scalar for the effect of population density on log-fecundity
 - `alpha_S`: a scalar for the effect of population density on logit-survival
-- `gamma`: a (positive) scalar for the difference in logit-survival betwen adults and juveniles
+- `gamma`: a (positive) scalar for the difference in logit-survival between adults and juveniles
 
 ```{r vital_dd_abundance}
 A_t_function <- function(state, iter, log_F, logit_S, alpha_F, alpha_S, gamma) {
@@ -306,17 +302,17 @@ iterations <- iterate_dynamic_matrix(
 
 Lambda <- iterations$stable_population
 ```
-Given additional scalar parameters `alpha_F` and `alpha_S`.
+
 
 ## Long-term temporal variation
 
-Given temporally-indexed response data $y_{i,t}$, temporal variation in environmental conditions and therefore vital rates can be included in a DSDM in one of two ways. The applicability of each of these depends on both the temporal scale of the data (the period of time betwen the observations) and the demographics of the species.
+Given temporally-indexed response data $y_{i,t}$, temporal variation in environmental conditions and therefore vital rates can be included in a DSDM in one of two ways. The applicability of each of these depends on both the temporal scale of the data (the period of time between the observations) and the demographics of the species.
 
-If the length of time between observations is on the order of multiple generations opf the species population, it may be reasonable to assume that the observed population sixes are reflective of contemporary environmental conditions only, and not past fluctuations in environental conditions. In other words, that the population is at, or close to, the long-term carrying capacity of the species if the current environmental conditions were to be held static. In this situation, considering temporal change in environmental conditions is simply a matter of redifining the index $i$ in the basic DSDM to indeex unique combinations of time and site, instead of just site. The relative abundance parameter for each of these observations is therefore computed from the intrinsic growth rate of the transition matrix at the corresponding environmental conditions.
+If the length of time between observations is on the order of multiple generations of the species population, it may be reasonable to assume that the observed population sixes are reflective of contemporary environmental conditions only, and not past fluctuations in environmental conditions. In other words, that the population is at, or close to, the long-term carrying capacity of the species if the current environmental conditions were to be held static. In this situation, considering temporal change in environmental conditions is simply a matter of redefining the index $i$ in the basic DSDM to index unique combinations of time and site, instead of just site. The relative abundance parameter for each of these observations is therefore computed from the intrinsic growth rate of the transition matrix at the corresponding environmental conditions.
 
 ## Short-term temporal variation
 
-Where the time period between observations is sufficiently short that the assumptions above are not met, or when the ecological question being answered requires it, temporal fluctuation in vital rates can instead be modelled by explicitly iterating the population through successive timesteps, at each time step using the corresponding transition matrix, as in the density-dependent vital rate model above. Instead of iterating for some arbitrrary number of iterations $T$ and taking the final state, instead the population is iterated over timesteps $t$ corresponding to time points in the dataset (and all intermediate timesteps). Thus the population at each timestep will be a function not only of the current environmental conditions, but of all previous environmental conditions - capturing the impacts of environmental stochasticity.
+Where the time period between observations is sufficiently short that the assumptions above are not met, or when the ecological question being answered requires it, temporal fluctuation in vital rates can instead be modelled by explicitly iterating the population through successive time-steps, at each time step using the corresponding transition matrix, as in the density-dependent vital rate model above. Instead of iterating for some arbitrary number of iterations $T$ and taking the final state, instead the population is iterated over time-steps $t$ corresponding to time points in the dataset (and all intermediate time-steps). Thus the population at each time-step will be a function not only of the current environmental conditions, but of all previous environmental conditions - capturing the impacts of environmental stochasticity.
 
 Under this formulation, the population size parameters $\mathbf{n}_{i,t}$ will be affected by the initial population state $\mathbf{n}_{i,0}$. this can either be introduced as an unknown parameter in the model, or set to an arbitrary value, and adding a sufficient 'burn-in' period prior to the first observation such that its value has no little effect on the estimated model parameters.
 
@@ -348,8 +344,8 @@ Input:
 - `beta_s`: a vector of length $K$ of regression coefficients for logit-survival
 - `alpha_F`: a scalar for the effect of population density on log-fecundity
 - `alpha_S`: a scalar for the effect of population density on logit-survival
-- `gamma`: a (positive) scalar for the difference in logit-survival betwen adults and juveniles
-- `y`: an $N$x$T$ matrix of presence-absence data at each timestep and site
+- `gamma`: a (positive) scalar for the difference in logit-survival between adults and juveniles
+- `y`: an $N$x$T$ matrix of presence-absence data at each time-step and site
 
 ```{r short_term_temporal}
 A_t_function <- function(state, iter, X, beta_F, beta_S, alpha_F, alpha_S, gamma) {
@@ -389,6 +385,107 @@ distribution(y) <- bernoulli(p)
 
 # Population dynamic models
 
+
+## Dispersal with a static transition matrix
+
+Dispersal of individuals between sites can be incorporated by expanding the matrix population model to simultaneously consider populations in all patches, with dispersal between patches quantified by a dispersal kernel.
+
+In previous models, which assumed sites to be independent of one another with respect to their population dynamics, the 3D $N$x$M$x$M$ array $A$ contained the $M$x$M$ transition matrices $\mathbf{A}_i$ for each of the $N$ sites $i$. To consider interacting population dynamics across sites, we instead consider a single, larger transition matrix $\mathbf{A}^*$ with dimension $NM$x$NM$, with a symmetric blocked structure. The the $i^{th}$ block-diagonal element of $\mathbf{A}^*$ is the site-specific $M$x$M$ population transition matrix $\mathbf{A}_i$ and the off-diagonal blocks are $M$x$M$ diagonal matrices with diagonal entries giving the probability $d_{j,i,i'}$ that an individual of life stage $j$ in site $i$ will move to site $i'$ in this time-step. $d_{j,i,i'}$ is computed using a dispersal kernel (an exponential kernel in this example) with stage-specific dispersal ability parameter $\tau_j$, standardised to sum to 1 over the study area and ensure $d_{j,i,i'}$ is a valid probability.
+
+By connecting the populations at all sites with immigration and emigration potential, we now have a single intrinsic growth rate for the entire population rather than for the population at each site. Rather than computing the relative abundance at each site $\Lambda_i$ as a function of an intrinsic growth rate, we can instead sum stable stage distributions over the stages in each site to yield a stable population distribution over sites. $\Lambda_i$ can therefore be computed as proportional (with constant $\alpha$) to this relative population size.
+
+In practice, the matrix $\mathbf{A}^*$ can be very sparse: the proportion of non-zero elements is $(M + N - 1) / (MN)$; as N increases, the proportion of non-zero approaches $1/M$. This sparsity can be increased further by setting an upper dispersal limit, beyond which $d_{j,i,i'}$ is set to zero, or by limiting the number of stages that can disperse. It is therefore computationally advantageous to compute the dominant eigenvector using sparse matrix methods, e.g. by iteration using sparse matrix multiplication, as in the biotic interaction model.
+
+#### Notation
+
+\begin{align}
+\Lambda_i &= \alpha v_i / \textstyle\sum_{i=1}^{N}{v_{i}} \\ \nonumber
+v_i &= \textstyle\sum_{j=1}^{M}{v^*_{j+(i-1)}} \\ \nonumber
+v^* &= eigvec(\mathbf{A}^*) \\ \nonumber
+\mathbf{A}^* &= \begin{bmatrix} \mathbf{A}_1 & \mathbf{M}_{1,2} & \dots & \mathbf{M}_{1,i'} & \dots & \mathbf{M}_{1,N}\\
+\mathbf{M}_{2,1} & \mathbf{A}_2 & \dots & \mathbf{M}_{2,i'} & \dots & \mathbf{M}_{2,N} \\
+\vdots & \vdots & \ddots & \vdots & &  \vdots \\
+\mathbf{M}_{i,1} & \mathbf{M}_{i,2} & \dots & \mathbf{A}_i & \dots & \mathbf{M}_{i,N} \\
+\vdots & \vdots &  & \vdots & \ddots & \vdots \\
+\mathbf{M}_{N,1} & \mathbf{M}_{N,2} & \dots & \mathbf{M}_{N,i'} & \dots & \mathbf{A}_N \end{bmatrix} \\ \nonumber
+\mathbf{M}_{i,i'} &= diag(d_{1,i,i'}, \dots, d_{j,i,i'}, \dots, d_{M,i,i'}) \\ \nonumber
+d_{j,i,i'} &= d^*_{j,i,i'} / \textstyle\sum_{i=1}^Nd^*_{j,i,i'} \\ \nonumber
+d^*_{j,i,i'} &=  e^{-\tau_j \mathbf{D}_{i,i'}}
+\end{align}
+
+##### Code
+
+Input:
+
+- `A`: a 3D $N$x$M$x$M$ array giving the population transition matrix at each site
+- `distance_matrix`: a (possibly sparse) $N$x$N$ matrix of distances between sites
+- `tau`: a vector of length $M$ of (positive) dispersal ability parameters for each stage
+- `alpha`: a (positive) scalar for the combined effect of imperfect detection and density dependence
+
+```{r static_dispersal}
+dispersal_kernel <- function (distance) {
+  exp(-tau * distance)
+}
+
+analysis <- iterate_matrix(
+  matrix = A,
+  distances = distance_matrix,
+  dispersal_kernel = dispersal_kernel
+)
+
+Lambda <- alpha * analysis$stable_abundance_distribution
+```
+
+## Dispersal with dynamic transition matrix
+
+Where the transition matrix is assumed to be dynamic - i.e.. to model the effects of environmental stochasticity, density-dependent vital rates, or population time series - we use the same model structure as for a static transition mat, but combine it with the iterative approach used for dynamic transition matrix models above. Because we explicitly iterate the matrix, we can apply dispersal with a second (dense) multiplication rather than needing to combine the population transition and dispersal matrices into a single block matrix. As for other dynamic transition matrix models, density-dependent vital rates are required to compute the relative abundances, since neither an intrinsic growth rate nor a stable population distribution are available in the dynamic matrix model.
+
+I n the notation below, I introduce an intermediate $N$x$M$ population state matrix $\mathbf{n}^*_{t+1}$ for the sizes of the populations in each life-stage at each site, between iteration of the population transition matrix (breeding) and iteration of the dispersal matrix (dispersal), which both occur between each successive time steps. For simplicity of notation, we assume here that breeding happens before dispersal, but the order of the operations can be reversed as required.
+
+The intermediate population states are computed as in earlier models by matrix multiplication of the state vectors $\mathbf{n}_{i,t}$ with the corresponding transition matrix $\mathbf{A}_i$. The ultimate population state for this time point is then given by matrix multiplications - separately for each of the *life stages* - of the intermediate population states against the dispersal matrix, formed from the distance matrix and dispersal function as in the dispersal model for static transition matrices. That is, the matrix multiplication is applied to the other dimension of the population state matrix.
+
+##### Notation
+
+\begin{align}
+\mathbf{n}_{j,t+1} &= \mathbf{d}_j \mathbf{n}^*_{j,t+1} \\ \nonumber
+\mathbf{n}^*_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
+d_{j,i,i'} &= d^*_{j,i,i'} / \textstyle\sum_{i=1}^Nd^*_{j,i,i'} \\ \nonumber
+d^*_{j,i,i'} &=  e^{-\tau_j \mathbf{D}_{i,i'}}
+\end{align}
+
+where $\mathbf{D}$ is an $N$x$N$ matrix of distances between sites, used to define $N$x$N$ matrix $\mathbf{d}_j$ of dispersal probabilities for life stage $j$, which sums to 1 across each column.
+
+##### Code
+
+Input:
+
+- `A_t_fun`: a function yielding for each time point a $N$x$M$x$M$ array of transition matrices for each site
+- `n_init`: a (positive) vector of length $M$ or matrix of dimension $N$x$M$ giving the initial population state at each location
+- `timesteps`: the number of time-steps to iterate for
+- `distance_matrix`: a (possibly sparse) $N$x$N$ matrix of distances between sites
+- `tau`: a vector of length $M$ of (positive) dispersal ability parameters for each stage
+- `...`: additional named arguments to `A_t_fun`, which may be lists with different elements to be used at each time point
+
+```{r dynamic_dispersal}
+dispersal_kernel <- function (distance) {
+  exp(-tau * distance)
+}
+
+iterations <- iterate_dynamic_matrix(
+  matrix_function = A_t_function, 
+  initial_state = n_init,
+  niter = timesteps,
+  distances = distance_matrix,
+  dispersal_kernel = dispersal_kernel,
+  ...
+)
+
+Lambda <- iterations$all_states
+```
+
+Note that the final line could be replaced with: `Lambda <- iterations$stable_population` to yield the long-term stable population in the case that dispersal and density-dependent vital rates are required, but neither the effects of environmental stochasticity nor a time series of population sizes is required.
+
+
 ## Species with complex demography
 
 <illustrate that any species for which a transition matrix can be formed can be modelled with a DSDM- at least to illustrate that multiple life stages can be considered.>
@@ -399,9 +496,9 @@ distribution(y) <- bernoulli(p)
 
 ## Biotic interactions
 
-Simultaneous demographic species distribution modelling of multiple species can be achieved by replacing the population transition matrices at each site $\mathbf{A}_i$ with a block-diagonal matrix that has the population transition matrices for each species on the diagonal. For model of $L$ species each with $M$ lifestages $\mathbf{A}_i$ therefore has dimension $LM$x$LM$. The off-diagonal blocks are all zero-matrices, since an individual can neither change species nor produce offspring of another species. Interactions between species can be encoded via density-dependent vital rates, with the density of both conspecific and intraspecific populations affecting the vital rates of each species.
+Simultaneous demographic species distribution modelling of multiple species can be achieved by replacing the population transition matrices at each site $\mathbf{A}_i$ with a block-diagonal matrix that has the population transition matrices for each species on the diagonal. For model of $L$ species each with $M$ life-stages $\mathbf{A}_i$ therefore has dimension $LM$x$LM$. The off-diagonal blocks are all zero-matrices, since an individual can neither change species nor produce offspring of another species. Interactions between species can be encoded via density-dependent vital rates, with the density of both conspecific and intraspecific populations affecting the vital rates of each species.
 
-As in the single-species density-dependent vital rate model above the relative population density for each species is computed by iteration; at each timestep recalculating the transition matrix from population densities of all species and matrix-multiplying it by the current population density vector to obtain the subsequent population density vector. The transition matrix $\mathbf{A}_i$ is sparse; with only 1 in $L$ elements being non-zero. This iteration can therefore be carried out efficiently with sparse matrix-multiplication operations.
+As in the single-species density-dependent vital rate model above the relative population density for each species is computed by iteration; at each time-step recalculating the transition matrix from population densities of all species and matrix-multiplying it by the current population density vector to obtain the subsequent population density vector. The transition matrix $\mathbf{A}_i$ is sparse; with only 1 in $L$ elements being non-zero. This iteration can therefore be carried out efficiently with sparse matrix-multiplication operations.
 
 
 ##### Notation
@@ -421,7 +518,7 @@ logit(\mathbf{S}_{J_{l,i,t}}) &= logit(\mathbf{S}_{A_{l,i,t}}) - \gamma_l \\ \no
 \mathbf{N}_{l,i,t} &= \textstyle\sum_{j=1+(l - 1)}^{lM}{\mathbf{n}_{i,j,t}}
 \end{align}
 
-where $\mathbf{F}$, $\mathbf{S}_A$, $\mathbf{S}_J$, and $\mathbf{N}$ are 3D arrays with dimension $L$x$N$x$T$ giving the fecundity, adult and juvenile survival and relative population density of each species $l$ at site $i$ at time $t$, computed from $K$x$L$ matrices $\beta_F$ and $\beta_S$ or regression coefficients for the submodels for each of species, and $L$x$L$ matrices $\mathbf{\alpha}_F$ and $\mathbf{\alpha}_S$ of density-dependence effects between specie. I.e. each element $\mathbf{\alpha}_{F_{l,l'}}$ gives the effect of the density of the population of species $l'$ on the log-fecundity of species $l$. Off-diagonal elements of $\mathbf{\alpha}_F$ and $\mathbf{\alpha}_S$  quantify fecundity- and survival-mediated interactions between species, whilst the diagonal elements quantify conspecific density-dependence.
+where $\mathbf{F}$, $\mathbf{S}_A$, $\mathbf{S}_J$, and $\mathbf{N}$ are 3D arrays with dimension $L$x$N$x$T$ giving the fecundity, adult and juvenile survival and relative population density of each species $l$ at site $i$ at time $t$, computed from $K$x$L$ matrices $\beta_F$ and $\beta_S$ or regression coefficients for the sub-models for each of species, and $L$x$L$ matrices $\mathbf{\alpha}_F$ and $\mathbf{\alpha}_S$ of density-dependence effects between specie. I.e. each element $\mathbf{\alpha}_{F_{l,l'}}$ gives the effect of the density of the population of species $l'$ on the log-fecundity of species $l$. Off-diagonal elements of $\mathbf{\alpha}_F$ and $\mathbf{\alpha}_S$  quantify fecundity- and survival-mediated interactions between species, whilst the diagonal elements quantify conspecific density-dependence.
 
 ##### Code
 
@@ -430,9 +527,9 @@ Input:
 - `X`: a $N$x$K$ design matrix for vital rate regression sub-models
 - `beta_F`: a $K$x$L$ matrix of regression coefficients for log-fecundity for each species
 - `beta_S`: a $K$x$L$ matrix of regression coefficients for logit-survival for each species
-- `alpha_F`: a $K$x$K$ matrix of the intra- and inter-specific effects of population density on log-fecundity
-- `alpha_S`: a $K$x$K$ matrix of the intra- and inter-specific effects of population density on logit-survival
-- `gamma`: a (positive) vector of length $K$ for the differences in logit-survival betwen adults and juveniles for each species
+- `alpha_F`: a $L$x$L$ matrix of the intra- and inter-specific effects of population density on log-fecundity
+- `alpha_S`: a $L$x$L$ matrix of the intra- and inter-specific effects of population density on logit-survival
+- `gamma`: a (positive) vector of length $K$ for the differences in logit-survival between adults and juveniles for each species
 
 ```{r biotic_interactions}
 A_t_function <- function(state, iter, log_F, logit_S, alpha_F, alpha_S, gamma, dd_weights) {
@@ -473,7 +570,7 @@ Lambda <- iterations$stable_population
 
 ## Evolutionary dynamics
 
-Similarly to the biotic interactions model, we can consider a population of single species but with $L$ different genotypes with a blocked transition matrix. In this model, the genotypes are linked via reproduction rather than density-dependent vital rates. tThe $L$x$L$ matrix $\mathbf{m}$ quantifies mutation rates between different genotypes. For an individual of genotype $l$, each of its offspring has probability $\mathbf{m}_{l,l'}$ of being of genotype $l'$. Each genotype has its own vital rate submodels, representing a linked phenotype driving population dynamics for that genotype. By analysing the combined transition matrix $\mathbf{A}^*_i$ at each site $i$ with different environmental covariates, the model can consider how selection for each genotype varies across the environment, and predict the genetic makeup of populations.
+Similarly to the biotic interactions model, we can consider a population of single species but with $L$ different genotypes with a blocked transition matrix. In this model, the genotypes are linked via reproduction rather than density-dependent vital rates. The $L$x$L$ matrix $\mathbf{m}$ quantifies mutation rates between different genotypes. For an individual of genotype $l$, each of its offspring has probability $\mathbf{m}_{l,l'}$ of being of genotype $l'$. Each genotype has its own vital rate sub-models, representing a linked phenotype driving population dynamics for that genotype. By analysing the combined transition matrix $\mathbf{A}^*_i$ at each site $i$ with different environmental covariates, the model can consider how selection for each genotype varies across the environment, and predict the genetic makeup of populations.
 
 This model is compatible with both static and dynamic transition matrices. In the static case, the expected abundance $\Lambda_{l,i}$ of each genotype $l$ at each site $i$ can computed by the product of the expected total abundance $\Lambda^*_i$ (computed via an abundance model as in the basic model) and the stable distribution of genotypes, calculated by summing the dominant eigenvector over the stages in each genotype and standardising to sum to one. In the dynamic case relative abundances can be calculated in the same way as for the biotic interaction model.
 
@@ -499,7 +596,7 @@ logit(\mathbf{S}_{A}) &= \mathbf{X} \beta_S \\ \nonumber
 logit(\mathbf{S}_{J_{l,i}}) &= logit(\mathbf{S}_{A_{l,i}}) - \gamma_l
 \end{align}
 
-where $\mathbf{F}$, $\mathbf{S}_A$, $\mathbf{S}_J$, and $\mathbf{N}$ are $L$x$N$ matrices giving the fecundity, adult and juvenile survival and relative population density of each genotype $l$ at site $i$, computed from $K$x$L$ matrices $\beta_F$ and $\beta_S$ of regression coefficients for the submodels for each of species. $\mathbf{m}$ is an $L$x$L$ matrix of positive values with columns summing to one, giving the probabilities of a parent of one genotype producing offspring of each genotype. 
+where $\mathbf{F}$, $\mathbf{S}_A$, $\mathbf{S}_J$, and $\mathbf{N}$ are $L$x$N$ matrices giving the fecundity, adult and juvenile survival and relative population density of each genotype $l$ at site $i$, computed from $K$x$L$ matrices $\beta_F$ and $\beta_S$ of regression coefficients for the sub-models for each of species. $\mathbf{m}$ is an $L$x$L$ matrix of positive values with columns summing to one, giving the probabilities of a parent of one genotype producing offspring of each genotype. 
 
 An equivalent notation for $\mathbf{A}^*_i$ using Kronecker products of matrices is as follows:
 
@@ -508,7 +605,7 @@ An equivalent notation for $\mathbf{A}^*_i$ using Kronecker products of matrices
 \mathbf{R}_i &= \mathbf{F}_i \otimes \mathbf{B}^T \odot (\mathbf{S}_{J_i} \otimes \mathbf{B} + \mathbf{S}_{A_i} \otimes \mathbf{C})
 \end{align}
 
-where $\mathbf{B}$ is an $M$x$M$ matrix with ones on the first row and zeros elsewhere (ie. a mask indicating cells representing fecundity rates), $\mathbf{C}$ is its reverse (zeros on the first row, ones elsewhere) $\mathbf{1}$ is length $L$ vector of ones, $\mathbf{I}$ is an identity matrix of dimension $L$, and $\odot$ and $\otimes$ represent the Hadamard (elementwise) and Kronecker products respectively.
+where $\mathbf{B}$ is an $M$x$M$ matrix with ones on the first row and zeros elsewhere (i.e.. a mask indicating cells representing fecundity rates), $\mathbf{C}$ is its reverse (zeros on the first row, ones elsewhere) $\mathbf{1}$ is length $L$ vector of ones, $\mathbf{I}$ is an identity matrix of dimension $L$, and $\odot$ and $\otimes$ represent the Hadamard (element-wise) and Kronecker products respectively.
 
 This is the form that we use in the code below, vectorised across all $N$ sites, since it is more computationally efficient to carry out the calculations in this way in greta.
 
@@ -516,108 +613,63 @@ This is the form that we use in the code below, vectorised across all $N$ sites,
 
 Input:
 
+- `X`: a $N$x$K$ design matrix for vital rate regression sub-models
+- `beta_F`: a $K$x$L$ matrix of regression coefficients for log-fecundity for each genotype
+- `beta_S`: a $K$x$L$ matrix of regression coefficients for logit-survival for each genotype
+- `m`: a $L$x$L$ matrix of the transition (mutation) rates between genotypes, with columns summing to one
+- `gamma`: a (positive) vector of length $K$ for the differences in logit-survival between adults and juveniles for each species
+
 ```{r evolutionary_dynamics}
+# vital rate models
+log_F<- X %*% beta_F
+logit_S<- X %*% beta_S
+F <- exp(log_F)
+S_A <- plogis(logit_S)
+S_J <- plogis(logit_S - gamma)
 
+L <- length(gamma)
+N <- nrow(X)
+M <- 2
+padding <- zeros(N, L * M)
+B <- zeros(M, M)
+B[1, ] <- 1
+C <- 1 - B
+dd_weights <- diag(L)[rep(1:L, each = M), ]
+
+# array A_star of transition matrices
+mutation <- kronecker(m, B) + kronecker(diag(L), C)
+
+F_rep <- do.call(rbind, replicate(M, F, simplify = FALSE))
+dim(F_rep) <- c(N, L * M)
+F_kron_tB <- abind(F_rep, padding, along = 3)
+
+SJ_rep <- do.call(cbind, replicate(M, S_J, simplify = FALSE))
+SJ_kron_B <- rbind(SJ_rep, padding)
+dim(SJ_kron_B) <- c(N, L * 2,  M)
+
+SA_rep <- do.call(cbind, replicate(M, S_A, simplify = FALSE))
+SA_kron_C <- rbind(padding, SA_rep)
+dim(SA_kron_C) <- c(N, L * 2,  M)
+
+R <- F_kron_tB + SJ_kron_B + SA_kron_C
+one_kron_R <- do.call(abind, c(replicate(L, R, simplify = FALSE), list(along = 3)))
+dim(one_kron_R) <- c(N, L * M, L * M)
+one_kron_R <- aperm(one_kron_R, c(1, 3, 2))
+
+# do multiplication across N as a matrix
+dim(one_kron_R) <- c(N, L ^ 2 * M ^ 2)
+dim(mutation) <- c(L ^ 2 * M ^ 2)
+A_star <- sweep(one_kron_R, 2, mutation, "*")
+dim(A_star) <- c(N, L * M, L * M)
+
+analysis <- iterate_matrix(A_star)
+v_star <- analysis$stable_abundance_distribution
+v_standardised <- analysis$stable_abundance_distribution %*% dd_weights
+lambda <- analysis$lambda
+K <- (lambda - 1) * alpha
+Lambda_star <- log1pe(K)
+Lambda <- Lambda_star * v_standardised
 ```
-
-## Dispersal with a static transition matrix
-
-Dispersal of individuals between sites can be incorporated by expanding the matrix population model to simultaneously consider populations in all patches, with dispersal between patches quantified by a dispersal kernel.
-
-In previous models, which assumed sites to be independent of one another with respect to their population dynamics, the 3D $N$x$M$x$M$ array $A$ contained the $M$x$M$ transition matrices $\mathbf{A}_i$ for each of the $N$ sites $i$. To consider interacting population dynamics across sites, we instead consider a single, larger transition matrix $\mathbf{A}^*$ with dimension $NM$x$NM$, with a symmetric blocked structure. The the $i$^{th} block-diagonal element of $\mathbf{A}^*$ is the site-specific $M$x$M$ population transition matrix $\mathbf{A}_i$ and the off-diagonal blocks are $M$x$M$ diagonal matrices with diagonal entries giving the probability $d_{j,i,i'}$ that an individual of life stage $j$ in site $i$ will move to site $i'$ in this timestep. $d_{j,i,i'}$ is computed using a dispersal kernel (an exponential kernel in this example) with stage-specific dispersal ability parameter $\tau_j$, standardised to sum to 1 over the study area and ensure $d_{j,i,i'}$ is a valid probability.
-
-By connecting the populations at all sites with immigration and emigration potential, we now have a single intrinsic growth rate for the entire population rather than for th eopulation at each site. Rather than computing the relative abundance at each site $\Lambda_i$ as a function of an intrinsic growth rate, we can instead sum stable stage distributions over the stages in each site to yeild a stable population distribution over sites. $\Lambda_i$ can therefore be computed as proportional (with constant $\alpha$) to this relative population size.
-
-In practice, the matrix $\mathbf{A}^*$ can be very sparse: the proportion of non-zero elements is $(M + N - 1) / (MN)$; as N increases, the proportion of non-zero approaches $1/M$. This sparsity can be increased further by setting an upper dispersal limit, beyond which $d_{j,i,i'}$ is set to zero, or by limiting the number of stages that can disperse. It is therefore computationally advantageous to compute the dominant eigenvector using sparse matrix methods, e.g. by iteration using sparse matrix multiplication, as in the biotic interaction model.
-
-#### Notation
-
-\begin{align}
-\Lambda_i &= \alpha v_i / \textstyle\sum_{i=1}^{N}{v_{i}} \\ \nonumber
-v_i &= \textstyle\sum_{j=1}^{M}{v^*_{j+(i-1)}} \\ \nonumber
-v^* &= eigvec(\mathbf{A}^*) \\ \nonumber
-\mathbf{A}^* &= \begin{bmatrix} \mathbf{A}_1 & \mathbf{M}_{1,2} & \dots & \mathbf{M}_{1,i'} & \dots & \mathbf{M}_{1,N}\\
-\mathbf{M}_{2,1} & \mathbf{A}_2 & \dots & \mathbf{M}_{2,i'} & \dots & \mathbf{M}_{2,N} \\
-\vdots & \vdots & \ddots & \vdots & &  \vdots \\
-\mathbf{M}_{i,1} & \mathbf{M}_{i,2} & \dots & \mathbf{A}_i & \dots & \mathbf{M}_{i,N} \\
-\vdots & \vdots &  & \vdots & \ddots & \vdots \\
-\mathbf{M}_{N,1} & \mathbf{M}_{N,2} & \dots & \mathbf{M}_{N,i'} & \dots & \mathbf{A}_N \end{bmatrix} \\ \nonumber
-\mathbf{M}_{i,i'} &= diag(d_{1,i,i'}, \dots, d_{j,i,i'}, \dots, d_{M,i,i'}) \\ \nonumber
-d_{j,i,i'} &= d^*_{j,i,i'} / \textstyle\sum_{i=1}^Nd^*_{j,i,i'} \\ \nonumber
-d^*_{j,i,i'} &=  e^{-\tau_j \mathbf{D}_{i,i'}}
-\end{align}
-
-##### Code
-
-Input:
-
-- `A`: a 3D $N$x$M$x$M$ array giving the population transition matrix at each site
-- `distance_matrix`: a (possibly sparse) $N$x$N$ matrix of distances between sites
-- `tau`: a vector of length $M$ of (positive) dispersal ability parameters for each stage
-- `alpha`: a (positive) scalar for the combind effect of imperfect detection and density dependence
-
-```{r static_dispersal}
-dispersal_kernel <- function (distance) {
-  exp(-tau * distance)
-}
-
-analysis <- iterate_matrix(
-  matrix = A,
-  distances = distance_matrix,
-  dispersal_kernel = dispersal_kernel
-)
-
-Lambda <- alpha * analysis$stable_abundance_distribution
-```
-
-## Dispersal with dynamic transition matrix
-
-Where the transition matrix is assumed to be dynamic - ie. to model the effects of environmental stochasticity, depsnity-dependent vital rates, or population time series - we use the same model structure as for a static transition mat, but combine it with the iterative approach used for dynamic transition matrix models above. Because we explicitly iterate the matrix, we can apply dispersal with a second (dense) multiplication rather than needing to combine the population transition and dispersal matrices into a single block matrix. As for other dynamic transition matrix models, density-dependent vital rates are required to compute the relative abundances, since neither an intrinsic growth rate nor a stable population distribution are available in the dynamic matrix model.
-
-I n the notation below, I introduce an intermediate $N$x$M$ population state matrix $\mathbf{n}^*_{t+1}$ for the sizes of the populations in each lifestage at each site, between iteration of the population transition matrix (breeding) and iteration of the dispersal matrix (dispersal), which both occur between each successive time steps. For simplicity of notation, we assume here that breeding happens before dispersal, but the order of the operations can be reversed as required.
-
-The intermediate population states are computed as in earlier models by matrix multiplication of the state vectors $\mathbf{n}_{i,t}$ with the corresponding transition matrix $\mathbf{A}_i$. The ultimate population state for this time point is then given by matrix multiplications - separately for each of the *life stages* - of the intermediate population states against the dispersal matrix, formed from the distance matrix and dispersal function as in the dispersal model for static transition matrices. That is, the matrix multiplication is applied to the other dimension of the population state matrix.
-
-##### Notation
-
-\begin{align}
-\mathbf{n}_{j,t+1} &= \mathbf{d}_j \mathbf{n}^*_{j,t+1} \\ \nonumber
-\mathbf{n}^*_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
-d_{j,i,i'} &= d^*_{j,i,i'} / \textstyle\sum_{i=1}^Nd^*_{j,i,i'} \\ \nonumber
-d^*_{j,i,i'} &=  e^{-\tau_j \mathbf{D}_{i,i'}}
-\end{align}
-
-where $\mathbf{D}$ is an $N$x$N$ matrix of distances between sites, used to define $N$x$N$ matrix $\mathbf{d}_j$ of dispersal probabilitiesfor life stage $j$, which sums to 1 across each column.
-
-##### Code
-
-Input:
-
-- `A_t_fun`: a function yielding for each time point a $N$x$M$x$M$ array of transition matrices for each site
-- `n_init`: a (positive) vector of length $M$ or matrix of dimension $N$x$M$ giving the initial population state at each location
-- `timesteps`: the number of timesteps to iterate for
-- `distance_matrix`: a (possibly sparse) $N$x$N$ matrix of distances between sites
-- `tau`: a vector of length $M$ of (positive) dispersal ability parameters for each stage
-- `...`: additional named arguments to `A_t_fun`, which may be lists with different elements to be used at each time point
-
-```{r dynamic_dispersal}
-dispersal_kernel <- function (distance) {
-  exp(-tau * distance)
-}
-
-iterations <- iterate_dynamic_matrix(
-  matrix_function = A_t_function, 
-  initial_state = n_init,
-  niter = timesteps,
-  distances = distance_matrix,
-  dispersal_kernel = dispersal_kernel,
-  ...
-)
-
-Lambda <- iterations$all_states
-```
-
-Note that the final line could be replaced with: `Lambda <- iterations$stable_population` to yield the long-term stable population in the case that dispersal and density-dependent vital rates are required, but neither the effects of environmental stochasticity nor a time series of population sizes is required.
 
 
 # References
