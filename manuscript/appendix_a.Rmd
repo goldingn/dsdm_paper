@@ -408,8 +408,8 @@ As in the single-species density-dependent vital rate model above the relative p
 
 \begin{align}
 \Lambda_{i,l} &= \mathbf{N}_{l,i,T} \\ \nonumber
-\mathbf{n}_{i,t+1} &= \mathbf{A}_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
-\mathbf{A}_{i,t+1} &= \begin{bmatrix} \mathbf{A}_{1,i,t+1} & & \dots & & 0 \\
+\mathbf{n}_{i,t+1} &= \mathbf{A}^*_{i,t+1} \mathbf{n}_{i,t} \\ \nonumber
+\mathbf{A}^*_{i,t+1} &= \begin{bmatrix} \mathbf{A}_{1,i,t+1} & & \dots & & 0 \\
 & \ddots & & & \\
 \vdots & & \mathbf{A}_{l,i,t+1} & & \vdots \\
 & & & \ddots & \\
@@ -473,16 +473,44 @@ Lambda <- iterations$stable_population
 
 ## Evolutionary dynamics
 
-As in the biotic interactions, model different genotypes with a separate set of life stages, but fecundity in off-diagonal blocks gives the probability of the offspring having a different genotype to the parent. Different genotypes can therefore have different vital rates.
+Similarly to the biotic interactions model, we can consider a population of single species but with $L$ different genotypes with a blocked transition matrix. In this model, the genotypes are linked via reproduction rather than density-dependent vital rates. tThe $L$x$L$ matrix $\mathbf{m}$ quantifies mutation rates between different genotypes. For an individual of genotype $l$, each of its offspring has probability $\mathbf{m}_{l,l'}$ of being of genotype $l'$. Each genotype has its own vital rate submodels, representing a linked phenotype driving population dynamics for that genotype. By analysing the combined transition matrix $\mathbf{A}^*_i$ at each site $i$ with different environmental covariates, the model can consider how selection for each genotype varies across the environment, and predict the genetic makeup of populations.
 
-How to get separate abundances? intrinsic growth rate-derived abundance, multiplied by relative abundance of each of the genotypes.
+This model is compatible with both static and dynamic transition matrices. In the static case, the expected abundance $\Lambda_{l,i}$ of each genotype $l$ at each site $i$ can computed by the product of the expected total abundance $\Lambda^*_i$ (computed via an abundance model as in the basic model) and the stable distribution of genotypes, calculated by summing the dominant eigenvector over the stages in each genotype and standardising to sum to one. In the dynamic case relative abundances can be calculated in the same way as for the biotic interaction model.
 
 ##### Notation
 
 \begin{align}
-a
+\Lambda_{l,i} &= \alpha \Lambda^*_i v_{l,i} / \textstyle\sum_{l=1}^{L}{v_{l,i}} \\ \nonumber
+\Lambda^*_i &= ln(1 + e^{K_i})  \\ \nonumber
+K_i &= (\lambda_i - 1) \alpha \\ \nonumber
+v_{l,i} &= \textstyle\sum_{j=1}^{M}{v^*_{j+(l-1),i}} \\ \nonumber
+v^*_i &= eigvec(\mathbf{A}^*_i) \\ \nonumber
+\lambda_i &= eigval(\mathbf{A}^*_i) \\ \nonumber
+\mathbf{A}^*_i &= \begin{bmatrix} \mathbf{A}_{1,i} & \mathbf{F}_{1,2,i} & \dots & \mathbf{F}_{1,l',i} & \dots & \mathbf{F}_{1,L,i}\\
+\mathbf{F}_{2,1,i} & \mathbf{A}_{2,i} & \dots & \mathbf{F}_{2,l',i} & \dots & \mathbf{F}_{2,L,i} \\
+\vdots & \vdots & \ddots & \vdots & &  \vdots \\
+\mathbf{F}_{l,1,i} & \mathbf{F}_{l,2,i} & \dots & \mathbf{A}_{l,i} & \dots & \mathbf{F}_{l,L,i} \\
+\vdots & \vdots &  & \vdots & \ddots & \vdots \\
+\mathbf{F}_{L,1,i} & \mathbf{F}_{L,2,i} & \dots & \mathbf{F}_{L,l',i} & \dots & \mathbf{A}_{L,i} \end{bmatrix} \\ \nonumber
+\mathbf{F}_{l,l',i} &= \begin{bmatrix} \mathbf{m}_{l,l'} \cdot F_{l',i} \cdot S_{J_{l',i}} & \mathbf{m}_{l,l'} \cdot F_{l',i} \cdot S_{A_{l',i}} \\ 0 & 0 \end{bmatrix} \\ \nonumber
+\mathbf{A}_{l,i} &= \begin{bmatrix} \mathbf{m}_{l,l} \cdot F_{l,i} \cdot S_{J_{l,i}} & \mathbf{m}_{l,l} \cdot F_{l,i} \cdot S_{A_{l,i}} \\ S_{J_{l,i}} & S_{A_{l,i}} \end{bmatrix}  \\ \nonumber
+ln(\mathbf{F}) &= \mathbf{X} \beta_F \\ \nonumber
+logit(\mathbf{S}_{A}) &= \mathbf{X} \beta_S \\ \nonumber
+logit(\mathbf{S}_{J_{l,i}}) &= logit(\mathbf{S}_{A_{l,i}}) - \gamma_l
 \end{align}
 
+where $\mathbf{F}$, $\mathbf{S}_A$, $\mathbf{S}_J$, and $\mathbf{N}$ are $L$x$N$ matrices giving the fecundity, adult and juvenile survival and relative population density of each genotype $l$ at site $i$, computed from $K$x$L$ matrices $\beta_F$ and $\beta_S$ of regression coefficients for the submodels for each of species. $\mathbf{m}$ is an $L$x$L$ matrix of positive values with columns summing to one, giving the probabilities of a parent of one genotype producing offspring of each genotype. 
+
+An equivalent notation for $\mathbf{A}^*_i$ using Kronecker products of matrices is as follows:
+
+\begin{align}
+\mathbf{A}^*_i &=  (\mathbf{1} \otimes \mathbf{R}_i^T) \odot (\mathbf{m} \otimes \mathbf{B} + \mathbf{I} \otimes \mathbf{C})\\ \nonumber 
+\mathbf{R}_i &= \mathbf{F}_i \otimes \mathbf{B}^T \odot (\mathbf{S}_{J_i} \otimes \mathbf{B} + \mathbf{S}_{A_i} \otimes \mathbf{C})
+\end{align}
+
+where $\mathbf{B}$ is an $M$x$M$ matrix with ones on the first row and zeros elsewhere (ie. a mask indicating cells representing fecundity rates), $\mathbf{C}$ is its reverse (zeros on the first row, ones elsewhere) $\mathbf{1}$ is length $L$ vector of ones, $\mathbf{I}$ is an identity matrix of dimension $L$, and $\odot$ and $\otimes$ represent the Hadamard (elementwise) and Kronecker products respectively.
+
+This is the form that we use in the code below, vectorised across all $N$ sites, since it is more computationally efficient to carry out the calculations in this way in greta.
 
 ##### Code
 
