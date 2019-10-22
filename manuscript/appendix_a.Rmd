@@ -37,6 +37,7 @@ Note that statistical notation is written in the standard way with the first lin
 # Basic DSDM
 
 For ease of reference, I repeat here the equations and interpretation for the basic presence-absence DSDM presented in the main manuscript. It presents the model in its three parts, each of which can be modified independently. 
+
 ## Observation model
 
 The observation model for the basic DSDM relates the species' relative abundance (I.e. assumed to be within a multiplicative constant of the true abundance) $\Lambda_i$ at site $i$ to the probability of (observed) presence $p_i$ during a single presence-absence survey, and the presence-absence data are assumed to be independently Bernoulli-distributed following these probabilities as in a presence-absence species distribution model.
