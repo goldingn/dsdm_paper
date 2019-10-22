@@ -176,7 +176,7 @@ distribution(y) <- negative_binomial(size, prob)
 
 ## Presence-only data
 
-Presence-only data - where records consist of locations where the species has been reported as being present - can be considered as a thinned, inhomogenous Poisson point process [@wartonPoissonPointProcess2010;@rennerPointProcessModels2015]. The likelihood for this model comprises an intractable integral over the study area, which can be approximated in a number of ways that reduce the model to having a Poisson observation model. Here I apply the piece-wise constant approximation, defining the observations $y_i$ to be counts of occurrence records in each cell $i$, having area $a_i$, where the cells represent a partition of the study area [@diggleSpatialSpatioTemporalLogGaussian2013;@simpsonGoingGridComputationally2011]. That is they tessellate (but do not overlap) and together cover the entire study area.
+Presence-only data - where records consist of locations where the species has been reported as being present - can be considered as a thinned, inhomogeneous Poisson point process [@wartonPoissonPointProcess2010;@rennerPointProcessModels2015]. The likelihood for this model comprises an intractable integral over the study area, which can be approximated in a number of ways that reduce the model to having a Poisson observation model. Here I apply the piece-wise constant approximation, defining the observations $y_i$ to be counts of occurrence records in each cell $i$, having area $a_i$, where the cells represent a partition of the study area [@diggleSpatialSpatioTemporalLogGaussian2013;@simpsonGoingGridComputationally2011]. That is they tessellate (but do not overlap) and together cover the entire study area.
 Under this definition, the DSDM relative abundance parameter $\Lambda_i$ represents a density of point observations per unit area (assumed to be homogeneous across cell $i$) that *would* be seen if there were no spatial bias in rates of reporting. The expected number of presence-only observations in each cell is therefore the product of the relative abundance $\Lambda_i$, the area $a_i$, and a relative measure of the bias in reporting, $\tau_i$ (also assumed homogeneous across each cell). Values of $\tau_i$ for each location can be provided as data, or estimated during model-fitting via an additional regression sub-model against detection covariates. Since $\Lambda_i$ is only identified to within a multiplicative constant ($\alpha$ in Equation 2), the absolute value of $\tau_i$ is not identified in this model, so any model for $\tau_i$ should probably not have an intercept term. 
 
 ##### Notation
@@ -390,7 +390,7 @@ distribution(y) <- bernoulli(p)
 
 Dispersal of individuals between sites can be incorporated by expanding the matrix population model to simultaneously consider populations in all patches, with dispersal between patches quantified by a dispersal kernel.
 
-In previous models, which assumed sites to be independent of one another with respect to their population dynamics, the 3D $N$x$M$x$M$ array $A$ contained the $M$x$M$ transition matrices $\mathbf{A}_i$ for each of the $N$ sites $i$. To consider interacting population dynamics across sites, we instead consider a single, larger transition matrix $\mathbf{A}^*$ with dimension $NM$x$NM$, with a symmetric blocked structure. The the $i^{th}$ block-diagonal element of $\mathbf{A}^*$ is the site-specific $M$x$M$ population transition matrix $\mathbf{A}_i$ and the off-diagonal blocks are $M$x$M$ diagonal matrices with diagonal entries giving the probability $d_{j,i,i'}$ that an individual of life stage $j$ in site $i$ will move to site $i'$ in this time-step. $d_{j,i,i'}$ is computed using a dispersal kernel (an exponential kernel in this example) with stage-specific dispersal ability parameter $\tau_j$, standardised to sum to 1 over the study area and ensure $d_{j,i,i'}$ is a valid probability.
+In previous models, which assumed sites to be independent of one another with respect to their population dynamics, the 3D $N$x$M$x$M$ array $A$ contained the $M$x$M$ transition matrices $\mathbf{A}_i$ for each of the $N$ sites $i$. To consider interacting population dynamics across sites, we can instead consider a single, larger transition matrix $\mathbf{A}^*$ with dimension $NM$x$NM$, with a symmetric blocked structure. The the $i^{th}$ block-diagonal element of $\mathbf{A}^*$ is the site-specific $M$x$M$ population transition matrix $\mathbf{A}_i$ and the off-diagonal blocks are $M$x$M$ diagonal matrices with diagonal entries giving the probability $d_{j,i,i'}$ that an individual of life stage $j$ in site $i$ will move to site $i'$ in this time-step. $d_{j,i,i'}$ is computed using a dispersal kernel (an exponential kernel in this example) with stage-specific dispersal ability parameter $\tau_j$, standardised to sum to 1 over the study area and ensure $d_{j,i,i'}$ is a valid probability.
 
 By connecting the populations at all sites with immigration and emigration potential, we now have a single intrinsic growth rate for the entire population rather than for the population at each site. Rather than computing the relative abundance at each site $\Lambda_i$ as a function of an intrinsic growth rate, we can instead sum stable stage distributions over the stages in each site to yield a stable population distribution over sites. $\Lambda_i$ can therefore be computed as proportional (with constant $\alpha$) to this relative population size.
 
@@ -438,9 +438,9 @@ Lambda <- alpha * analysis$stable_abundance_distribution
 
 ## Dispersal with dynamic transition matrix
 
-Where the transition matrix is assumed to be dynamic - i.e.. to model the effects of environmental stochasticity, density-dependent vital rates, or population time series - we use the same model structure as for a static transition mat, but combine it with the iterative approach used for dynamic transition matrix models above. Because we explicitly iterate the matrix, we can apply dispersal with a second (dense) multiplication rather than needing to combine the population transition and dispersal matrices into a single block matrix. As for other dynamic transition matrix models, density-dependent vital rates are required to compute the relative abundances, since neither an intrinsic growth rate nor a stable population distribution are available in the dynamic matrix model.
+Where the transition matrix is assumed to be dynamic - i.e.. to model the effects of environmental stochasticity, density-dependent vital rates, or population time series - we can use the same model structure as for a static transition mat, but combine it with the iterative approach used for dynamic transition matrix models above. Because the matrix is explicitly iterated dispersal can be incorporated with a second (dense) multiplication rather than needing to combine the population transition and dispersal matrices into a single block matrix. As for other dynamic transition matrix models, density-dependent vital rates are required to compute the relative abundances, since neither an intrinsic growth rate nor a stable population distribution are available in the dynamic matrix model.
 
-I n the notation below, I introduce an intermediate $N$x$M$ population state matrix $\mathbf{n}^*_{t+1}$ for the sizes of the populations in each life-stage at each site, between iteration of the population transition matrix (breeding) and iteration of the dispersal matrix (dispersal), which both occur between each successive time steps. For simplicity of notation, we assume here that breeding happens before dispersal, but the order of the operations can be reversed as required.
+I n the notation below, I introduce an intermediate $N$x$M$ population state matrix $\mathbf{n}^*_{t+1}$ for the sizes of the populations in each life-stage at each site, between iteration of the population transition matrix (breeding) and iteration of the dispersal matrix (dispersal), which both occur between each successive time steps. For simplicity of notation, I assume here that breeding happens before dispersal, but the order of the operations can be reversed as required.
 
 The intermediate population states are computed as in earlier models by matrix multiplication of the state vectors $\mathbf{n}_{i,t}$ with the corresponding transition matrix $\mathbf{A}_i$. The ultimate population state for this time point is then given by matrix multiplications - separately for each of the *life stages* - of the intermediate population states against the dispersal matrix, formed from the distance matrix and dispersal function as in the dispersal model for static transition matrices. That is, the matrix multiplication is applied to the other dimension of the population state matrix.
 
@@ -488,11 +488,54 @@ Note that the final line could be replaced with: `Lambda <- iterations$stable_po
 
 ## Species with complex demography
 
-<illustrate that any species for which a transition matrix can be formed can be modelled with a DSDM- at least to illustrate that multiple life stages can be considered.>
+The DSDMs examples covered so far have all used the same two-stage population transition matrix, with adult and juvenile stages. This is by no means a limitation of the DSDM approach, the transition matrix can encode as many life-stages and as much complexity as is required to answer the question at hand and is supported by the available data and prior information.
+
+As an illustration of this, the following example implements a matrix model for a plant species with more complex life history; three adult stages $A_{1-3}$ and two seed bank stages $S_{2-3}$, as described in [@griffithPopulationMatrixModels2005]. As in the original paper, I  simplify the 9 vital rates from the original paper to 4, which I denote, for site $i$: $B_{AA_i}$ (direct recruitment), $B_{AS_i}$ (contribution to the seed bank), $P_{SS_i}$ (persistence in the seed bank), and $P_{SA_i}$ (recruitment from the seed bank). I.e.: $B_{AA_i} = B_{A_1-A_1} = B_{A_2-A_1} = B_{A_3-A_1}$, $B_{AS_i} = B_{A_1-S_2} = B_{A_2-S_2} = B_{A_3-S_2}$, $P_{SS_i} = P_{S_2-S_3}$, and $P_{SA_i} = P_{S_2-A_2} = P_{S_3-A_3}$. In turn, these rates are formed from one rate: the mean number of seeds per plant $S_i$; and 6 probabilities that I concatenate into a single vector $\mathbf{P}_i$ for each site: the fraction of seeds not dispersing ($\mathbf{P}_{i,1} = \text{No }D$), the probability of staying in the soil without germinating ($\mathbf{P}_{i,2} = P_{bank}$, the probability of a seed germinating once it has survived winter $\mathbf{P}_{i,3} = P_{germ}$, the probability of seed germinating and surviving to the first true leaf stage $\mathbf{P}_{i,4} = P_{estab}$, the probability of a seedling surviving from the first true leaf stage to the time of reproduction $\mathbf{P}_{i,5} = P_{surv}$, and the probability of a seed on the ground surviving overwinter to germination time $\mathbf{P}_{i,6} = P_{winter}$. I assume that all seven of these life history parameters vary with environmental covariates, and again model them with linear regression sub-models.
+
+##### Notation 
+
+\begin{align}
+\mathbf{A}_i &= \begin{bmatrix} 0 & 0 & B_{AS_i} & B_{AS_i} & B_{AS_i} \\ \nonumber
+P_{SS_i} & 0 & 0 & 0 & 0 \\ \nonumber
+0 & 0 & B_{AA_i} & B_{AA_i} & B_{AA_i} \\ \nonumber
+P_{SA_i} & 0 & 0 & 0 & 0 \\ \nonumber
+0 & P_{SA_i} & 0 & 0 & 0 \end{bmatrix} \\ \nonumber
+B_{AS_i} &= S_i \mathbf{P}_{i,1} \mathbf{P}_{i,2} \\ \nonumber
+B_{AA_i} &= S_i \mathbf{P}_{i,1} P_{SA_i} \\ \nonumber
+P_{SS_i} &= \mathbf{P}_{i,6} \mathbf{P}_{i,2} \\ \nonumber
+P_{SA_i} &= \mathbf{P}_{i,3} \mathbf{P}_{i,4} \mathbf{P}_{i,5} \\ \nonumber
+logit(\mathbf{P}) &= \mathbf{X}\beta_P \\ \nonumber
+ln(S_i) &= \mathbf{X}_i\beta_S
+\end{align}
+
+##### Code
+
+Input:
+
+- `X`: a $N$x$K$ design matrix for vital rate regression sub-models
+- `beta_P`: a $K$x$6$ matrix of regression coefficients for the 6 logit-probabilities in the vector $\mathbf{P}_i$
+- `beta_S`: a length $K$ vector of regression coefficients for log-seed-production
+
+```{r complex_demography}
+P <- ilogit(X %*% beta_P)
+S <- ilogit(X %*% beta_S)
+
+P_SA <- apply(P[, 3:5], 1, "prod")
+P_SS <- P[, 6] * P[, 2]
+B_AA <- S * P[, 1] * P_SA
+B_AS <- S * apply(P[, 1:2], 1, "prod")
+
+N <- nrow(X)
+zero <- zeros(N)
+col1 <- cbind(zero, P_SS, zero, P_SA, zero)
+col2 <- cbind(zeros(N, 4), P_SA)
+col3 <- cbind(B_AS, zero, B_AA, zeros(N, 2))
+A <- abind(col1, col2, col3, col3, col3, along = 3)
+```
 
 ## Integral projection models
 
-<to do, need to package up integration code into greta.dynamics?>
+<to do, don't package up integration code into greta.dynamics yet, show it warts-and-all for now>
 
 ## Biotic interactions
 
@@ -607,7 +650,7 @@ An equivalent notation for $\mathbf{A}^*_i$ using Kronecker products of matrices
 
 where $\mathbf{B}$ is an $M$x$M$ matrix with ones on the first row and zeros elsewhere (i.e.. a mask indicating cells representing fecundity rates), $\mathbf{C}$ is its reverse (zeros on the first row, ones elsewhere) $\mathbf{1}$ is length $L$ vector of ones, $\mathbf{I}$ is an identity matrix of dimension $L$, and $\odot$ and $\otimes$ represent the Hadamard (element-wise) and Kronecker products respectively.
 
-This is the form that we use in the code below, vectorised across all $N$ sites, since it is more computationally efficient to carry out the calculations in this way in greta.
+This is the form that I use in the code below, vectorised across all $N$ sites, since it is more computationally efficient to carry out the calculations in this way in greta.
 
 ##### Code
 
