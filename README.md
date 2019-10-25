@@ -4,4 +4,4 @@ This repository contains the source code for a paper on Demographic Species Dist
 
 It's very much a work in progress.
 
-You can launch this project in binder and play with interactively via this button: [![Launch Rstudio Binder](http://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/goldingn/dsdm_paper/master?urlpath=rstudio)
+You should at some point be able to launch this project in binder and play with interactively via this button: [![Launch Rstudio Binder](http://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/goldingn/dsdm_paper/master?urlpath=rstudio)
