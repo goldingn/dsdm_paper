@@ -665,6 +665,78 @@ A <- abind(col1, col2, col3, col3, col3, along = 3)
 
 <to do, don't package up integration code into greta.dynamics yet, show it warts-and-all for now>
 
+##### Notation 
+
+\begin{align}
+a
+\end{align}
+
+##### Code
+
+Input:
+
+- `matrix_dim`: a positive integer giving the dimension of the matrix used to integrate the IPM kernel
+- `X_off_size`: a $N$x$K_{off_size}$ design matrix for the offspring size environmental sub-model
+- `X_surv`: a $N$x$K_{surv}$ design matrix for the survival environmental sub-models
+- `X_growth`: a $N$x$K_{grow}$ design matrix for the growth environmental sub-model
+- `X_seedheads`: a $N$x$K_{seedhead}$ design matrix for the seedhead environmental sub-model
+- `beta_env_off_size`: a length $K_{off_size}$ vector of environmental regression coefficients for offspring size
+- `beta_env_surv_seedling`: a length $K_{surv}$ vector of environmental regression coefficients for logit-seedling-survival
+- `beta_env_surv_adult`: a length $K_{surv}$ vector of environmental regression coefficients for logit-adult-survival
+- `beta_env_growth`: a length $K_{grow}$ vector of environmental regression coefficients for growth
+- `beta_env_seedheads`: a length $K_{seedhead}$ vector of environmental regression coefficients for log-seadhead production
+- `beta_size_surv_seedling`: ?
+- `beta_size_surv_adult`: ?
+- `beta_size_grow`: ?
+- `beta_size_flower`: ?
+- `beta_germ`: ?
+- `beta_seeds`: ?
+
+```{r ipms}
+min_size <- 0
+max_size <- 5
+bounds <- min_size + (0:matrix_dim) * (max_size - min_size) / matrix_dim
+sizes <- 0.5 * (bounds[-(matrix_dim + 1)] + bounds[-1])
+bin_width <- sizes[2] - sizes[1]
+
+# environmental components of sub models
+off_size <- X_off_size %*% beta_env_off_size
+growth <- X_growth %*% beta_env_growth
+env_surv_seedling <- X_surv %*% beta_env_surv_seedling
+env_surv_adult <- X_surv %*% beta_env_surv_adult
+env_seedheads <- X_seedheads %*% beta_env_seedheads
+
+# size components of submodels
+flower <- ilogit(sizes * beta_size_flower)
+size_surv_seedling <- sizes * beta_size_surv_seedling
+size_surv_adult <- sizes * beta_size_surv_adult
+size_seedheads <- sizes * beta_size_seedheads
+
+# combined size and environmental effects
+seedheads <- exp(kronecker(size_seedheads, env_seedheads))
+surv_seedling <- ilogit(kronecker(size_surv_seedling, env_surv_seedling))
+surv_adult <- ilogit(kronecker(size_surv_adult, env_surv_adult))
+
+germination <- ilogit(beta_germ)
+seeds <- exp(beta_seeds)
+
+# kernelise growth and offspring size
+growth_density <- distribution_kernel(grow, grow_sd, sizes, bin_width)
+off_size_density <- distribution_kernel(off_size, off_size_sd, sizes, bin_width)
+
+# combine adult and seedling survival rates into one
+survival <- interpolate_survival(surv_adult, surv_seedling, sizes)
+
+# apply survival to growth density
+P <- sweep_3(growth_density, survival, FUN = "*")
+
+# apply recruitment rate to offspring size density
+recruits <- flower * seedheads * seeds * germ
+F <- sweep_3(offspring_size_density, recruits, FUN = "*")
+
+A <- P + F
+```
+
 ## Biotic interactions
 
 Simultaneous demographic species distribution modelling of multiple species can be achieved by replacing the population transition matrices at each site $\mathbf{A}_i$ with a block-diagonal matrix that has the population transition matrices for each species on the diagonal. For model of $L$ species each with $M$ life-stages $\mathbf{A}_i$ therefore has dimension $LM$x$LM$. The off-diagonal blocks are all zero-matrices, since an individual can neither change species nor produce offspring of another species. Interactions between species can be encoded via density-dependent vital rates, with the density of both conspecific and intraspecific populations affecting the vital rates of each species.
