@@ -27,17 +27,10 @@ source("R/fetch_data.R")
 
 read_all_data <- drake_plan(
 
-  # bbs analysis
-  bbs_covs = download_bbs_rasters(),
-  tidy_covs = writeRaster(bbs_covs, file_out("data/clean/bbs_covs.grd"), overwrite = TRUE),
-  bbs_occurrence = download_bbs(),
-  tidy_occ = saveRDS(bbs_occurrence, file_out("data/clean/bbs_occ.RDS")),
-  maps_coords = download_maps_locations(),
-  tidy_maps = saveRDS(maps_coords, file_out("data/clean/maps_stations.RDS")),
-
-  # protea analysis
-  protea_occurrence = download_merow(),
-  tidy_file = saveRDS(protea_occurrence, file_out("data/clean/protea_occurrence.RDS"))
+  download_bbs_rasters(file_out("data/clean/bbs_covs.grd")),
+  download_bbs(file_out("data/clean/bbs_occ.RDS")),
+  download_maps_locations(file_out("data/clean/maps_stations.RDS")),
+  download_protea(file_out("data/clean/protea_occurrence.RDS")),
 
 )
 
@@ -84,12 +77,23 @@ fit_bbs_model <- drake_plan(
 make(fit_bbs_model)
 
 fit_protea_model <- drake_plan(
+
   protea_occurrence = readRDS(file_in("data/clean/protea_occurrence.RDS")),
-  model_list = build_protea_model(protea_occurrence),
-  draws_list = run_mcmc(model_list),
-  draws_summary = check_draws(draws_list, "protea"),
-  relationships_fig = plot_protea_relationships(model_list, draws_list, protea_occurrence),
-  predictions = make_protea_predictions(model_list, draws_list, protea_occurrence)
+
+  informative_model_list = build_protea_model(
+    protea_occurrence,
+    informative_priors = TRUE
+  ),
+  informative_draws_list = run_mcmc(informative_model_list, verbose = TRUE, sample = hmc(Lmin = 10, Lmax = 15)),
+  informative_draws_summary = check_draws(informative_draws_list, "protea_informative"),
+
+  naive_model_list = build_protea_model(
+    protea_occurrence,
+    informative_priors = FALSE
+  ),
+  naive_draws_list = run_mcmc(naive_model_list),
+  naive_draws_summary = check_draws(naive_draws_list, "protea_naive"),
+
 )
 
 make(fit_protea_model)
@@ -101,7 +105,9 @@ source("R/plotting.R")
 plot_protea_data <- drake_plan(
   protea_occurrence = readRDS(file_in("data/clean/protea_occurrence.RDS")),
   protea_covs_fig = plot_covs(protea_occurrence, file_out("figures/protea_covs.png")),
-  protea_occ_fig = plot_occ(protea_occurrence, file_out("figures/protea_occ.png"))
+  protea_occ_fig = plot_occ(protea_occurrence, file_out("figures/protea_occ.png")),
+  protea_estimates = readRDS(file_in("data/clean/protea_estimates.RDS")),
+  protea_params_fig = plot_params(protea_estimates, file_out("figures/protea_occ.png"))
 )
 
 make(plot_protea_data)

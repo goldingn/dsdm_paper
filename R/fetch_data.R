@@ -1,5 +1,5 @@
 # download and unzip the RData object from Merow et al. (hosted on the Ecography data portal)
-download_merow <- function () {
+download_protea <- function (file) {
 
   # download and unzip
   url <- "http://www.ecography.org/sites/ecography.org/files/appendix/ecog-00839_appendix.zip"
@@ -45,13 +45,15 @@ download_merow <- function () {
       summer_smd = smdsum,
       winter_smd = smdwin,
       mean_annual_precip = map
-    )
+    ) -> protea_data
+
+  saveRDS(protea_data, file)
 
 }
 
 # get landcover and bioclim covariates for the BBS example and
 # remove extranous areas
-download_bbs_rasters <- function () {
+download_bbs_rasters <- function (file) {
 
   # get CarolineWren rasters from maxlike package and convert to a raster
   data(carw, envir = environment())
@@ -75,13 +77,14 @@ download_bbs_rasters <- function () {
   covs2 <- mask(covs2, covs1[[1]])
   covs <- stack(covs1, covs2)
 
+  writeRaster(covs, file = file, overwrite = TRUE)
   covs
-  # writeRaster(covs, file = "data/clean/bbs_covs")
+
 }
 
 # download the station names where this species was collected to derive vital
 # rate estimates, and the coordinates of those stations
-download_maps_locations <- function () {
+download_maps_locations <- function (file) {
 
   # get the data used to fit vital rates for the Carolina Chickadee
   cach_url <- "https://raw.githubusercontent.com/Akcakaya/MAPS-to-Models/master/Public%20dataset/CACH_BandDataAllMonths.csv"
@@ -98,7 +101,7 @@ download_maps_locations <- function () {
   stations_list <- xml2::as_list(stations_html)
 
   # pull out the section of the JS code with the station data
-  js_functions <- stations_list$html$head[[11]][[1]]
+  js_functions <- stations_list$html$head[[14]][[1]]
   js_function_split <- strsplit(js_functions, "\n")[[1]]
   circles <- js_function_split[32:1317]
 
@@ -119,6 +122,8 @@ download_maps_locations <- function () {
   idx <- match(names(station_weights), stations$id)
   stations <- stations[idx, ]
   stations$weight <- station_weights
+
+  saveRDS(stations, file)
   stations
 
 }
@@ -171,7 +176,7 @@ clean_bbs <- function(file, AOU, years = 2015) {
 }
 
 # get presence-absence data for the named species from BBS (using a BBS dataset code)
-download_bbs <- function (aou = 7360) {
+download_bbs <- function (file, aou = 7360) {
 
   # download BBS data via FTP
   ftp_path <-
@@ -209,6 +214,7 @@ download_bbs <- function (aou = 7360) {
   species <- species[!is.na(species$Latitude),]
   species <- species[!is.na(species$Longitude),]
 
+  saveRDS(species, file)
   species
 
 }
