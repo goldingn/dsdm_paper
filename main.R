@@ -16,7 +16,6 @@ library(RColorBrewer)
 library(dplyr)
 library(maxlike)
 library(pROC)
-library(truncdist)
 
 # modelling
 library(greta.dynamics)

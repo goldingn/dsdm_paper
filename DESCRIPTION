@@ -23,7 +23,6 @@ Depends:
     raster,
     RColorBrewer,
     roxygen2,
-    truncdist,
     viridis
 Remotes:
     greta-dev/greta.dynamics
