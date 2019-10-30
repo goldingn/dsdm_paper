@@ -118,3 +118,40 @@ plot_occ <- function (occurrence, filename) {
   )
 
 }
+
+# background for a forest plot
+forest_plot_base <- function (params) {
+
+}
+
+# ad points and bars to a forest plot
+forest_plot_add <- function (params) {
+
+  lines()
+  points()
+
+}
+
+# Produce forest plots for parameters in the protea DSDM, with a panerl each for the
+# informative and noninformative priors.  Priors in grey in the backgound,
+# posteriors in the foreground.
+plot_estimates <- function (protea_estimates, filename) {
+
+  on.exit(dev.off())
+  png(filename,
+      width = 1000,
+      height = 700,
+      pointsize = 30)
+
+  # non-informative prior plot
+  par(mfrow = c(1, 2))
+
+  forest_plot_base()
+  forest_plot_add(noninformative_params)
+
+  forest_plot_base()
+  forest_plot_add(informative_params)
+
+  dev.off()
+
+}
