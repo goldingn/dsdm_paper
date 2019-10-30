@@ -1,4 +1,4 @@
-# modelling functions for boht the BBS and protea analyses
+# modelling functions for both the BBS and protea analyses
 
 # given a vector greta array, where each element corresponds to a cell in the
 # raster, an mcmc.list object of posterior samples, return a raster giving the
@@ -522,9 +522,7 @@ compare_bbs_predictions <- function (predictions, data_list) {
 
 }
 
-
 op <- greta::.internals$nodes$constructors$op
-tf <- tensorflow::tf
 
 # normalise a matrix rowwise in exponential space. Ie. Given a matrix x, return a
 # matrix y where:
@@ -534,13 +532,15 @@ tf <- tensorflow::tf
 # or:
 # y[i, ] <- x[i, ] -  log(sum(exp(x[i, ])))
 log_normalise <- function (x) {
-  op("log_normalise", x, tf_operation = "tf_log_normalise")
-}
 
-tf_log_normalise <- function (x) {
-  # skipping batch dimension, do log_sum_exp on rows, then broadcast subtract it
-  sums <- tf$reduce_logsumexp(x, axis = 2L, keepdims = TRUE)
-  x - sums
+  tf_log_normalise <- function (x) {
+    # skipping batch dimension, do log_sum_exp on rows, then broadcast subtract it
+    sums <- tensorflow::tf$reduce_logsumexp(x, axis = 2L, keepdims = TRUE)
+    x - sums
+  }
+
+  op("log_normalise", x, tf_operation = "tf_log_normalise")
+
 }
 
 # load the parameter estimates from Merow et al. and format them as the

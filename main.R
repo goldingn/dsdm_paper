@@ -83,6 +83,7 @@ fit_protea_model <- drake_plan(
     protea_occurrence,
     informative_priors = TRUE
   ),
+
   informative_draws_list = run_mcmc(informative_model_list, verbose = TRUE, sample = hmc(Lmin = 10, Lmax = 15)),
   informative_draws_summary = check_draws(informative_draws_list, "protea_informative"),
 
@@ -95,7 +96,10 @@ fit_protea_model <- drake_plan(
 
 )
 
+# run each sampler independently, each using multiple cores
+future::plan(multisession, workers = 4)
 make(fit_protea_model)
+future::plan(old_plan)
 
 # plot data  --------------------------------------------------------
 
