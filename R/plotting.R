@@ -120,22 +120,49 @@ plot_occ <- function (occurrence, filename) {
 }
 
 # background for a forest plot
-forest_plot_base <- function (params) {
-
+forest_base <- function (params) {
+  locs <- seq(1, 0, length.out = nrow(params))
+  plot(locs ~ mean,
+       data = params,
+       type = "n",
+       ylab = "",
+       xlab = "",
+       axes = FALSE,
+       bty = "n",
+       ylim = c(0, 1),
+       xlim = range(c(params$lower, params$upper)))
+  abline(v = 0, lwd = 1, col = grey(0.5), lty = 3)
+  axis(side = 1, tcl = -0.3)
+  axis(side = 2, lty = 0, at = locs, labels = params$param, las = 2)
+  title(xlab = "estimate", col.lab = grey(0.3))
 }
 
-# ad points and bars to a forest plot
-forest_plot_add <- function (params) {
+# add points and bars to existing forest plot
+forest_points <- function(params, col = grey(0.8), scaling = 1) {
 
-  lines()
-  points()
+  locs <- seq(1, 0, length.out = nrow(params))
+  for (i in seq_len(nrow(params))) {
+    lines(x = c(params$lower[i], params$upper[i]),
+          y = cbind(locs[i], locs[i]),
+          lwd = 1.5 * scaling ^ 2,
+          col = col)
+  }
+
+  points(locs ~ params$mean,
+         pch = 16,
+         cex  = 1 * sqrt(scaling),
+         col = col)
 
 }
 
 # Produce forest plots for parameters in the protea DSDM, with a panerl each for the
 # informative and noninformative priors.  Priors in grey in the backgound,
 # posteriors in the foreground.
-plot_estimates <- function (protea_estimates, filename) {
+plot_estimates <- function(
+  naive_draws_summary,
+  informative_draws_summary,
+  filename
+) {
 
   on.exit(dev.off())
   png(filename,
@@ -143,15 +170,18 @@ plot_estimates <- function (protea_estimates, filename) {
       height = 700,
       pointsize = 30)
 
-  # non-informative prior plot
   par(mfrow = c(1, 2))
 
-  forest_plot_base()
-  forest_plot_add(noninformative_params)
+  # naive prior plot
+  forest_base(naive_params)
+  title(main = "with naive priors", col.main = grey(0.3))
+  forest_points(naive_priors, col = grey(0.9), scaling = 2)
+  forest_points(naive_params, col = grey(0.3), scaling = 1)
 
-  forest_plot_base()
-  forest_plot_add(informative_params)
-
-  dev.off()
+  # informative prior plot
+  forest_base(informative_params)
+  title(main = "with informative priors", col.main = grey(0.3))
+  forest_points(informative_priors, col = grey(0.9), scaling = 2)
+  forest_points(informative_params, col = grey(0.3), scaling = 1)
 
 }
