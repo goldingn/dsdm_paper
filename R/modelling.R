@@ -738,7 +738,7 @@ build_protea_model <- function (occurrence, informative_priors = FALSE) {
   # a few observations (for now)
   occurrence %>%
     filter(!is.na(presence)) %>%
-    sample_n(150) -> occ_train
+    sample_n(500) -> occ_train
 
   # formulae for the *environmental components* of the vital rate regressions
   formulae <- list(
@@ -901,28 +901,40 @@ build_protea_model <- function (occurrence, informative_priors = FALSE) {
   # observation model parameter
   likelihood_intercept <- normal(0, 10)
 
+  # probability of detection under Poisson sampling
+
   # form the likelihood
-  p_present <- icloglog(likelihood_intercept + log(lambda))
+  K <- (lambda - 1) * likelihood_intercept
+  Lambda <- log1pe(K)
+  p_present <- 1 - exp(-Lambda)
   distribution(occ_train$presence) <- bernoulli(p_present)
 
+  # set up parameters to trace
+  names(betas) <- paste0("beta_", names(betas))
+  names(size_coefs) <- paste0("gamma_", names(size_coefs))
+  params <- c(betas,
+              size_coefs,
+              list(growth_sd = growth_sd,
+                   offspring_size_sd = offspring_size_sd,
+                   likelihood_intercept = likelihood_intercept))
+
   # build the model
-  m <- model(lambda)
+  m <- with(params, model())
+
   # return the model and greta arrays (used for plotting and prediction)
   list(
     model = m,
-    environment_coefs = betas,
-    size_coefs = size_coefs,
-    growth_sd = growth_sd,
-    offspring_size_sd = offspring_size_sd
+    parameters = params,
+    lambda = lambda
   )
 
 }
 
 # do MCMC on the model
-run_mcmc <- function (model_list) {
+run_mcmc <- function (model_list, verbose = FALSE, ...) {
 
   timing <- system.time(
-    draws <- mcmc(model_list$model, verbose = FALSE)
+    draws <- mcmc(model_list$model, verbose = verbose, ...)
   )
 
   list(
@@ -931,19 +943,6 @@ run_mcmc <- function (model_list) {
   )
 
 }
-
-# use the model and MCMC parameter samples to visualise the fitted vital rate
-# relationships (using calculate and relevant design matrices)
-plot_protea_relationships <- function(draws_list, model_list, occurrence) {
-
-}
-
-# use the model and MCMC parameter samples to make posterior predictions of
-# the probability of presence in new places (using calculate and relevant design matrices)
-make_protea_predictions <- function(draws_list, model_list, occurrence) {
-
-}
-
 
 # check
 check_draws <- function (draws_list, name) {
@@ -955,7 +954,7 @@ check_draws <- function (draws_list, name) {
   dev.off()
 
   list(
-    r_hat = coda:::gelman.diag(draws),
+    r_hat = coda:::gelman.diag(draws, multivariate = FALSE),
     n_eff = coda:::effectiveSize(draws),
     summary = summary(draws)
   )
