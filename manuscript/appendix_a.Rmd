@@ -673,26 +673,80 @@ a
 
 ##### Code
 
+The below code requires some custom functions and a custom greta operation to perform the integration steps and build the kernels efficiently across 3D arrays representing kernels across multiple sites, and to carry out the interpolation of survival rates between adults and seedlings that is implemented in @merowUsingIntegralProjection2014.
+
 Input:
 
 - `matrix_dim`: a positive integer giving the dimension of the matrix used to integrate the IPM kernel
-- `X_off_size`: a $N$x$K_{off_size}$ design matrix for the offspring size environmental sub-model
-- `X_surv`: a $N$x$K_{surv}$ design matrix for the survival environmental sub-models
-- `X_growth`: a $N$x$K_{grow}$ design matrix for the growth environmental sub-model
-- `X_seedheads`: a $N$x$K_{seedhead}$ design matrix for the seedhead environmental sub-model
-- `beta_env_off_size`: a length $K_{off_size}$ vector of environmental regression coefficients for offspring size
-- `beta_env_surv_seedling`: a length $K_{surv}$ vector of environmental regression coefficients for logit-seedling-survival
-- `beta_env_surv_adult`: a length $K_{surv}$ vector of environmental regression coefficients for logit-adult-survival
-- `beta_env_growth`: a length $K_{grow}$ vector of environmental regression coefficients for growth
-- `beta_env_seedheads`: a length $K_{seedhead}$ vector of environmental regression coefficients for log-seadhead production
-- `beta_size_surv_seedling`: ?
-- `beta_size_surv_adult`: ?
-- `beta_size_grow`: ?
-- `beta_size_flower`: ?
-- `beta_germ`: ?
-- `beta_seeds`: ?
+- `X_offsize`: a $N$x$K_{\text{offsize}}$ design matrix for the offspring size environmental sub-model
+- `X_surv`: a $N$x$K_{\text{surv}}$ design matrix for the survival environmental sub-models
+- `X_grow`: a $N$x$K_{\text{grow}}$ design matrix for the growth environmental sub-model
+- `X_seedheads`: a $N$x$K_{\text{seedhead}}$ design matrix for the seedhead environmental sub-model
+- `beta_env_offsize`: a length $K_{\text{offsize}}$ vector of environmental regression coefficients for offspring size
+- `beta_env_surv_seedling`: a length $K_{\text{surv}}$ vector of environmental regression coefficients for logit-seedling-survival
+- `beta_env_surv_adult`: a length $K_{\text{surv}}$ vector of environmental regression coefficients for logit-adult-survival
+- `beta_env_grow`: a length $K_{\text{grow}}$ vector of environmental regression coefficients for growth
+- `beta_env_seedheads`: a length $K_{\text{seedhead}}$ vector of environmental regression coefficients for log-seadhead production
+- `beta_size_surv_seedling`: a scalar coefficient for the effect of size on logit-seedling-survival
+- `beta_size_surv_adult`: a scalar coefficient for the effect of size on logit-adult-survival
+- `beta_size_grow`: a scalar coefficient for the effect of size on growth
+- `beta_size_flower`: a scalar coefficient for the effect of size on logit-flowering-probability
+- `alpha_germ`: a scalar parameter for logit-germination-probability
+- `alpha_seeds`: a scalar parameter for log-seed-production
+- `alpha_flower`: a scalar intercept parameter for on logit-flowering-probability
+- `offsize_sd`: a positive scalar parameter for the standard deviation of the offspring size distribution
+- `grow_sd`: a positive scalar parameter for the standard deviation of the growth distribution
 
 ```{r ipms}
+# normalise a matrix to sum to one rowwise *in exponential space*. Ie. return y
+# where: exp(y[i, ]) = exp(x[i, ]) / sum(exp(x[i, ]))
+log_normalise <- function (x) {
+  op <- greta::.internals$nodes$constructors$op
+  op("log_normalise", x, tf_operation = "tf_log_normalise")
+}
+
+# tensorflow code for log normalisation
+tf_log_normalise <- function (x) {
+  sums <- tensorflow::tf$reduce_logsumexp(x, axis = 2L, keepdims = TRUE)
+  x - sums
+}
+
+# multiply matrix B by each slice of the 3D array A in 3rd dimension
+sweep_prod_3d <- function(A, B) {
+  n <- dim(A)[1]
+  m <- dim(A)[2]
+  Al <- aperm(A, c(2, 3, 1))
+  dim(Al) <- c(m, n * m)
+  Bl <- t(B)
+  dim(Bl) <- n * m
+  C <- sweep(Al, 2, Bl, "*")
+  dim(C) <- c(m, m, n)
+  aperm(C, c(3, 1, 2))
+}
+
+# create 3D kernel array for Gaussian transitions (working with the log density
+# for computational stability)
+distribution_kernel <- function (mean_mat, sd, sizes, bin_width) {
+  var <- sd ^ 2
+  log_constant <- -0.5 * log(2 * pi) - log(sd)
+  diff <- kronecker(sizes, mean_mat, FUN = "-")
+  log_density <- log(bin_width) + log_constant - (diff ^ 2) / (2 * var)
+  log_density <- log_normalise(log_density)
+  dim(log_density) <- c(dim(mean_mat), ncol(mean_mat))
+  log_density <- aperm(log_density, c(1, 3, 2))
+  exp(log_density)
+}
+
+interpolate_survival <- function (adult_surv, seedling_surv, sizes) {
+  range <- 0.728 - 0.182
+  weights <- 0.728 / range  - (sizes / range)
+  weights[sizes > 0.728] <- 0
+  weights[sizes <= 0.182] <- 1
+  weighted_seedling_surv <- sweep(seedling_surv, 2, weights, FUN = "*")
+  weighted_adult_surv <- sweep(adult_surv, 2, 1 - weights, FUN = "*")
+  weighted_seedling_surv + weighted_adult_surv
+}
+
 min_size <- 0
 max_size <- 5
 bounds <- min_size + (0:matrix_dim) * (max_size - min_size) / matrix_dim
@@ -700,40 +754,32 @@ sizes <- 0.5 * (bounds[-(matrix_dim + 1)] + bounds[-1])
 bin_width <- sizes[2] - sizes[1]
 
 # environmental components of sub models
-off_size <- X_off_size %*% beta_env_off_size
-growth <- X_growth %*% beta_env_growth
+offsize <- X_offsize %*% beta_env_offsize
+grow <- X_grow %*% beta_env_grow
 env_surv_seedling <- X_surv %*% beta_env_surv_seedling
 env_surv_adult <- X_surv %*% beta_env_surv_adult
 env_seedheads <- X_seedheads %*% beta_env_seedheads
 
 # size components of submodels
-flower <- ilogit(sizes * beta_size_flower)
+flower <- ilogit(alpha_flower + sizes * beta_size_flower)
 size_surv_seedling <- sizes * beta_size_surv_seedling
 size_surv_adult <- sizes * beta_size_surv_adult
 size_seedheads <- sizes * beta_size_seedheads
 
-# combined size and environmental effects
+# vital rates at all sites
 seedheads <- exp(kronecker(size_seedheads, env_seedheads))
 surv_seedling <- ilogit(kronecker(size_surv_seedling, env_surv_seedling))
 surv_adult <- ilogit(kronecker(size_surv_adult, env_surv_adult))
+germination <- ilogit(alpha_germ)
+seeds <- exp(alpha_seeds)
 
-germination <- ilogit(beta_germ)
-seeds <- exp(beta_seeds)
-
-# kernelise growth and offspring size
-growth_density <- distribution_kernel(grow, grow_sd, sizes, bin_width)
-off_size_density <- distribution_kernel(off_size, off_size_sd, sizes, bin_width)
-
-# combine adult and seedling survival rates into one
+# kernelise growth * survival and recruitment * offspring size, and combine
 survival <- interpolate_survival(surv_adult, surv_seedling, sizes)
-
-# apply survival to growth density
-P <- sweep_3(growth_density, survival, FUN = "*")
-
-# apply recruitment rate to offspring size density
+next_size_density <- distribution_kernel(sizes + grow, grow_sd, sizes, bin_width)
+P <- sweep_prod_3d(next_size_density, survival)
 recruits <- flower * seedheads * seeds * germ
-F <- sweep_3(offspring_size_density, recruits, FUN = "*")
-
+offsize_density <- distribution_kernel(offsize, offsize_sd, sizes, bin_width)
+F <- sweep_prod_3d(offsize_density, recruits)
 A <- P + F
 ```
 
