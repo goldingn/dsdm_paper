@@ -14,6 +14,8 @@ output:
     highlight: null
 ---
 
+\newcommand{\smallunderscore}{\textscale{.5}{\textunderscore}}
+
 ```{r knitrOpts, echo = FALSE, cache = FALSE, eval = TRUE}
 # set up knitr options
 knitr::opts_chunk$set(message = FALSE,
@@ -515,11 +517,11 @@ Dispersal of individuals between sites can be incorporated into a static transit
 
 In previous models, which assumed sites to be independent of one another with respect to their population dynamics, the 3D $N$x$M$x$M$ array $A$ contained the $M$x$M$ transition matrices $\mathbf{A}_i$ for each of the $N$ sites $i$. To consider interacting population dynamics across sites, we can instead consider a single, larger transition matrix $\mathbf{A}^*$ with dimension $NM$x$NM$. This matrix combines two $NM$x$NM$ block-diagonal matrices: $\mathbb{A}$ - with each of the $N$ diagonal blocks giving the $M$x$M$ population transition matrix at site $i$ $\mathbf{A}_i$; and $\mathbb{D}$ - with each of the $M$ diagonal blocks giving an $N$x$N$ between-site dispersal matrix $\mathbf{D}_j$ for stage $j$. $\mathbf{A}^*$ is formed as $\mathbf{A}^* = \mathbf{P}^T \mathbb{D}\mathbf{P} \mathbb{A}$, where $\mathbf{P}$ is the vec-permutation matrix described in @hunterUseVecpermutationMatrix2005, which composes the two component matrices in the appropriate way. Note that this formulation assumes that in each season demographic transitions occur, then dispersal. For the reverse order, the matrix would be computed as $\mathbf{A}^* = \mathbf{P} \mathbb{A} \mathbf{P}^T \mathbb{D}$.
 
-Each element of the stage-dispersal matrices $\mathbf{D}_j$ give the probability $D_{j,i,i'}$ that an individual of  stage $j$ in site $i$ will move to site $i'$ in this time-step. $D_{j,i,i'}$ is computed using a dispersal kernel (an exponential kernel in this example) with stage-specific dispersal ability parameter $\tau_j$, standardised to sum to 1 over the study area to ensure $D_{j,i,i'}$ is a valid probability.
+Each element of the stage-dispersal matrices $\mathbf{D}_j$ give the probability $D_{j,i',i}$ that an individual of  stage $j$ in site $i$ will move to site $i'$ in this time-step. $D_{j,i',i}$ is computed using a dispersal kernel (an exponential kernel in this example) with stage-specific dispersal ability parameter $\tau_j$, standardised to sum to 1 over the study area to ensure $D_{j,i',i}$ is a valid probability.
 
 By connecting the populations at all sites with immigration and emigration potential, we now have a single intrinsic growth rate for the entire population rather than for the population at each site. Rather than computing the relative abundance at each site $\Lambda_i$ as a function of an intrinsic growth rate, we can instead sum stable stage distributions over the stages in each site to yield a stable population distribution over sites. $\Lambda_i$ can therefore be computed as proportional (with constant $\alpha$) to this relative population size.
 
-In practice, the matrix $\mathbf{A}^*$ can be very sparse: the proportion of non-zero elements is $(M + N - 1) / (MN)$; as N increases, the proportion of non-zero approaches $1/M$. This sparsity can be increased further by setting an upper dispersal limit, beyond which $d_{j,i,i'}$ is set to zero, or by limiting the number of stages that can disperse. It is therefore computationally advantageous to compute the dominant eigenvector using sparse matrix methods, e.g. by iteration using sparse matrix multiplication, as in the biotic interaction model.
+In practice, the matrix $\mathbf{A}^*$ can be very sparse: the proportion of non-zero elements is $(M + N - 1) / (MN)$; as N increases, the proportion of non-zero approaches $1/M$. This sparsity can be increased further by setting an upper dispersal limit, beyond which $d_{j,i',i}$ is set to zero, or by limiting the number of stages that can disperse. It is therefore computationally advantageous to compute the dominant eigenvector using sparse matrix methods, e.g. by iteration using sparse matrix multiplication, as in the biotic interaction model.
 
 #### Notation
 
@@ -538,8 +540,8 @@ In practice, the matrix $\mathbf{A}^*$ can be very sparse: the proportion of non
 \vdots & & \mathbf{D}_j & & \vdots \\
 & & & \ddots & \\
 0 & & \dots & & \mathbf{D}_M \end{bmatrix} \\ \nonumber
-\mathbf{D}_{j,i,i'} &= d_{j,i,i'} / \textstyle\sum_{i=1}^Nd_{j,i,i'} \\ \nonumber
-d_{j,i,i'} &=  e^{-\tau_j D_{i,i'}}
+\mathbf{D}_{j,i',i} &= d_{j,i',i} / \textstyle\sum_{i'=1}^Nd_{j,i',i} \\ \nonumber
+d_{j,i',i} &=  e^{-\tau_j D_{i',i}}
 \end{align}
 where $D$ is an $N$x$N$  dense, symmetric matrix of Euclidean distances between all sites.
 
@@ -579,8 +581,8 @@ The intermediate population states are computed as in earlier models by matrix m
 \begin{align}
 \mathbf{n}_{j,t+1} &= \mathbf{D}_j \mathbf{n}^*_{j,t+1} \\ \nonumber
 \mathbf{n}^*_{i,t+1} &= \mathbf{A}_{i,t} \mathbf{n}_{i,t} \\ \nonumber
-\mathbf{D}_{j,i,i'} &= d_{j,i,i'} / \textstyle\sum_{i=1}^Nd_{j,i,i'} \\ \nonumber
-d_{j,i,i'} &=  e^{-\tau_j D_{i,i'}}
+\mathbf{D}_{j,i',i} &= d_{j,i',i} / \textstyle\sum_{i=1}^Nd_{j,i',i} \\ \nonumber
+d_{j,i',i} &=  e^{-\tau_j D_{i',i}}
 \end{align}
 
 ##### Code
@@ -663,13 +665,32 @@ A <- abind(col1, col2, col3, col3, col3, along = 3)
 
 ## Integral projection models
 
-<to do, don't package up integration code into greta.dynamics yet, show it warts-and-all for now>
+For species with complex demography and populations that are better represented as size-structureed rather than stage-structured DSDMs can be formed by replacing the MPM with an integral projection model (IPM). As an example, this section presents the equivalent code and notation for the complex, environmentally-explicit spatial IPM for *Protea repens* presented in @merowUsingIntegralProjection2014 and studied as a DSDM in the manuscript. This model is particularly complex - having 8 vital rate submodels, and requiring interpolation of survival rates betwen seedlings and adults.
+
+Whereas matrix population models consider populations with a discrete population distribution over different stages in the model, integral projection models consider populations via a continuous population distribution over individual sizes. The dynamics of a population at site $i$ are therefore modelled as $\mathbf{n}_{i,t+1}(z') = \int \mathbf{K}_{i}(z'|z)\mathbf{n}_{i,t}(z) \, dz$, where $\mathbf{n}_{i,t}(z)$ is an abundance *function* (at site $i$ and time $t$) of sizes $z$, giving the number of individuals of with size around $z$, and $\mathbf{K}_{i}(z'|z)$ is a continuous transition *kernel* at site $i$ mapping these abundance functions between time points. Whereas a matrix population model is described by a matrix-vector multiplication (which sums products between elements of the matrix and vector), the analagous operaiton in this continuous representation is an integration over a convolution. In practice though, this integration and convolution is commonly approximated by discretizing and normalising the kernel $\mathbf{K}_{i}(z'|z)$ to yield a matrix $\mathbf{A}_i$ with a sufficiently large number of size bins $j$ which can be analysed in the same way as a matrix population model. We can therefore compute such a matrix and include it in the DSDM framework.
+
+Whereas MPM-based DSDMs have a single environmental regression submodel for each vital rate, in the IPM these are replaced with submodels that combine the effects of both the environment and individual size. These functions must therefore be manipulated to create arrays (over sites and size bins) that are then combined and normalised to yield an approximation to the IPM. The discretized notation and code to implement these models is therefore somewhat more involved than for MPMs.
 
 ##### Notation 
 
 \begin{align}
-a
+\mathbf{A}_i &= \mathbf{F}_i + \mathbf{P}_i \\ \nonumber
+\mathbf{F}_{i,j',j} &= p_{\text{flower}_{j}} f_{\text{seedheads}_i} f_{\text{seeds}} p_{\text{germ}} f^*_{\text{offsize}_{i,j'}} \\ \nonumber
+\mathbf{P}_{i,j',j} &= p_{\text{surv}_{i,j}} f^*_{\text{grow}_{i,j',j}} \\ \nonumber
+f^*_{\text{offsize}_{i,j'}} &= f_{\text{offsize}_{i,j'}} / \textstyle\sum_{j'=1}^{M}{f_{\text{offsize}_{i,j'}}} \\ \nonumber
+f^*_{\text{nextsize}_{i,j',j}} &= f_{\text{nextsize}_{i,j',j}} / \textstyle\sum_{j'=1}^{M}{f_{\text{nextsize}_{i,j',j}}} \\ \nonumber
+logit(p_{\text{flower}}) &= \alpha_{\text{flower}} + z \gamma_{\text{flower}} \\ \nonumber
+log(f_{\text{seedheads}}) &= \mathbf{X}_{\text{seedheads}} \beta_{\text{seedheads}} \\ \nonumber
+p_{\text{surv}_{i,j}} &= w_j p_{\text{surv-adult}_{i,j}} + (1 - w_j) p_{\text{surv-seedling}_i}  \\ \nonumber
+logit(p_{\text{surv-adult}_{i,j}}) &= \mathbf{X}_{\text{surv}_i} \beta_{\text{surv-adult}} + z_j \gamma_{\text{surv-adult}} \\ \nonumber
+logit(p_{\text{surv-seedling}_i}) &= \mathbf{X}_{\text{surv}_i} \beta_{\text{surv-seedling}} + z_j \gamma_{\text{surv-seedling}} \\ \nonumber
+f_{\text{offsize}_{i,j'}} &= \pi (z_{j'} | \mu_{\text{offsize}_{i,j'}}, \sigma_{\text{offsize}}^2) \\ \nonumber
+\mu_{\text{offsize}_{i,j'}} &= \mathbf{X}_{\text{offsize}_i} \beta_{\text{offsize}} \\ \nonumber
+f_{\text{nextsize}_{i,j',j}} &= \pi (z_{j'} | z_{j} + \mu_{\text{grow}_{i,j}}, \sigma_{\text{grow}}^2) \\ \nonumber
+\mu_{\text{grow}_{i,j}} &= \mathbf{X}_{\text{grow}_i} \beta_{\text{grow}} + z_{j} \gamma_{\text{grow}} \\ \nonumber
 \end{align}
+
+where $z$ is a vector of sizes of length $M$; $\mathbf{X}_{\text{seedheads}}$, $\mathbf{X}_{\text{surv}}$, $\mathbf{X}_{\text{offsize}}$, $\mathbf{X}_{\text{grow}}$, $\beta_{\text{seedheads}}$, $\beta_{\text{surv-adult}}$, $\beta_{\text{surv-seedling}}$, $\beta_{\text{offsize}}$, and $\beta_{\text{grow}}$ are design matrices of environmental covariates (and intercept columns) and vectors of regression coefficients for the environmental components of log-seedhead production, logit- adult and seedling survival probabilities, mean offspring size and mean growth rates; $\alpha_{\text{flower}}$, $\gamma_{\text{flower}}$, $\gamma_{\text{surv-adult}}$, $\gamma_{\text{surv-seedling}}$, and $\gamma_{\text{grow}}$ are scalar intercepts and regression coefficients for the effect of size on the logit-probabilities of flowering, adult survival, seedling survival, and on the growth rate; $f_{\text{seeds}}$ and $p_{\text{germ}}$ are scalar parameters for the average number of seeds per seedhead and the probability of germination; $w$ is a vector of weights of length $M$ linearly interpolating size-specific survival between adult and seedling survival probabilities; $\sigma_{\text{offsize}}$ and $\sigma_{\text{grow}}$ are positive scalar parameters giving the standard deviations of offspring sizes and growth rates; and $\pi (x | \mu, \sigma ^ 2)$ denotes the density of univariate normal distribution with parameters $\mu$ and $\sigma^2$ evaluated at $x$.
 
 ##### Code
 
@@ -677,22 +698,22 @@ The below code requires some custom functions and a custom greta operation to pe
 
 Input:
 
-- `matrix_dim`: a positive integer giving the dimension of the matrix used to integrate the IPM kernel
+- `matrix_dim`: a positive integer giving $M$ - the dimension of the matrix used to integrate the IPM kernel
 - `X_offsize`: a $N$x$K_{\text{offsize}}$ design matrix for the offspring size environmental sub-model
 - `X_surv`: a $N$x$K_{\text{surv}}$ design matrix for the survival environmental sub-models
 - `X_grow`: a $N$x$K_{\text{grow}}$ design matrix for the growth environmental sub-model
 - `X_seedheads`: a $N$x$K_{\text{seedhead}}$ design matrix for the seedhead environmental sub-model
-- `beta_env_offsize`: a length $K_{\text{offsize}}$ vector of environmental regression coefficients for offspring size
-- `beta_env_surv_seedling`: a length $K_{\text{surv}}$ vector of environmental regression coefficients for logit-seedling-survival
-- `beta_env_surv_adult`: a length $K_{\text{surv}}$ vector of environmental regression coefficients for logit-adult-survival
-- `beta_env_grow`: a length $K_{\text{grow}}$ vector of environmental regression coefficients for growth
-- `beta_env_seedheads`: a length $K_{\text{seedhead}}$ vector of environmental regression coefficients for log-seadhead production
-- `beta_size_surv_seedling`: a scalar coefficient for the effect of size on logit-seedling-survival
-- `beta_size_surv_adult`: a scalar coefficient for the effect of size on logit-adult-survival
-- `beta_size_grow`: a scalar coefficient for the effect of size on growth
-- `beta_size_flower`: a scalar coefficient for the effect of size on logit-flowering-probability
-- `alpha_germ`: a scalar parameter for logit-germination-probability
-- `alpha_seeds`: a scalar parameter for log-seed-production
+- `beta_offsize`: a length $K_{\text{offsize}}$ vector of environmental regression coefficients for offspring size
+- `beta_surv_seedling`: a length $K_{\text{surv}}$ vector of environmental regression coefficients for logit-seedling-survival
+- `beta_surv_adult`: a length $K_{\text{surv}}$ vector of environmental regression coefficients for logit-adult-survival
+- `beta_grow`: a length $K_{\text{grow}}$ vector of environmental regression coefficients for growth
+- `beta_seedheads`: a length $K_{\text{seedhead}}$ vector of environmental regression coefficients for log-seadhead production
+- `gamma_surv_seedling`: a scalar coefficient for the effect of size on logit-seedling-survival
+- `gamma_surv_adult`: a scalar coefficient for the effect of size on logit-adult-survival
+- `gamma_grow`: a scalar coefficient for the effect of size on growth
+- `gamma_flower`: a scalar coefficient for the effect of size on logit-flowering-probability
+- `germination`: a scalar parameter in $(0,1)$ for germination-probability
+- `seeds`: a positive scalar parameter for seed-production
 - `alpha_flower`: a scalar intercept parameter for on logit-flowering-probability
 - `offsize_sd`: a positive scalar parameter for the standard deviation of the offspring size distribution
 - `grow_sd`: a positive scalar parameter for the standard deviation of the growth distribution
@@ -754,24 +775,22 @@ sizes <- 0.5 * (bounds[-(matrix_dim + 1)] + bounds[-1])
 bin_width <- sizes[2] - sizes[1]
 
 # environmental components of sub models
-offsize <- X_offsize %*% beta_env_offsize
-grow <- X_grow %*% beta_env_grow
-env_surv_seedling <- X_surv %*% beta_env_surv_seedling
-env_surv_adult <- X_surv %*% beta_env_surv_adult
-env_seedheads <- X_seedheads %*% beta_env_seedheads
+offsize <- X_offsize %*% beta_offsize
+grow <- X_grow %*% beta_grow
+env_surv_seedling <- X_surv %*% beta_surv_seedling
+env_surv_adult <- X_surv %*% beta_surv_adult
+env_seedheads <- X_seedheads %*% beta_seedheads
 
 # size components of submodels
-flower <- ilogit(alpha_flower + sizes * beta_size_flower)
-size_surv_seedling <- sizes * beta_size_surv_seedling
-size_surv_adult <- sizes * beta_size_surv_adult
-size_seedheads <- sizes * beta_size_seedheads
+flower <- ilogit(alpha_flower + sizes * gamma_flower)
+size_surv_seedling <- sizes * gamma_surv_seedling
+size_surv_adult <- sizes * gamma_surv_adult
+size_seedheads <- sizes * gamma_seedheads
 
 # vital rates at all sites
 seedheads <- exp(kronecker(size_seedheads, env_seedheads))
 surv_seedling <- ilogit(kronecker(size_surv_seedling, env_surv_seedling))
 surv_adult <- ilogit(kronecker(size_surv_adult, env_surv_adult))
-germination <- ilogit(alpha_germ)
-seeds <- exp(alpha_seeds)
 
 # kernelise growth * survival and recruitment * offspring size, and combine
 survival <- interpolate_survival(surv_adult, surv_seedling, sizes)
