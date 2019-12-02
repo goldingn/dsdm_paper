@@ -51,7 +51,7 @@ fit_bbs_model <- drake_plan(
   maps_coords = readRDS(file_in("data/clean/maps_stations.RDS")),
 
   # prepare the train/test split and design matrices
-  bbs_formula = ~ 1 + pcMix + pcDec + pcCon + bio1 + bio6 + bio12,
+  bbs_formula = ~ 1 + pcMix + pcDec + pcCon + bio1 + bio12,
   bbs_data_list = prep_data(bbs_formula, bbs_occurrence, bbs_covs, maps_coords),
 
   # model fitting

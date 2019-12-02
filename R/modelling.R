@@ -13,7 +13,7 @@ map_variable <- function (greta_array, draws, raster_template) {
 }
 
 # use all covariates in both models
-surv_covs <- fec_covs <- all_covs <- c("pcMix", "pcDec", "pcCon", "bio1", "bio6", "bio12")
+surv_covs <- fec_covs <- all_covs <- c("pcMix", "pcDec", "pcCon", "bio1", "bio12")
 
 # calculate survival, given covariates
 get_survival <- function (X, params) {
