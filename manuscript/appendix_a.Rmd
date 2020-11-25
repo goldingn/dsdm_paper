@@ -258,6 +258,8 @@ Input:
 - `A`: an $N$x$M$x$M$ array containing the $M$x$M$ transition matrices for all sites
 - `alpha`: a (positive) scalar for the combined effect of imperfect detection and density dependence
 
+**BP: Here and Ricker: should A be an NxK matrix, as in first section, above?; Further below, M seems to now be used for number of stages rather than densitiy dependence parameter**
+
 ```{r beverton_holt}
 analysis <- iterate_matrix(A)
 lambda <- analysis$lambda
@@ -300,7 +302,7 @@ Lambda <- lambda * alpha
 
 Where distribution data are disaggregated according to discrete stages considered in the population transition matrix, the corresponded relative abundance $\Lambda_{j,i}$ for each stage $j$ can be calculated by computing the overall relative abundance $\Lambda^*_{j,i}$ via one of the two models above, and then disaggregating it into the $M$ stages using the stable stage distribution vector $\mathbf{v}_i$: the dominant (left) eigenvector $\mathbf{v}^*_i$ normalised to sum to 1.
 
-An approach similar to this can also used be used to compute relative abundances from a static transition matrix for a  matrix metapopulation model - in that model the stable distribution between sites already provides a relative abundance estimate, so there is no need for a model to relate the intrinsic growth rate to relative abundance. See [*Dispersal with a static transition matrix*](#static_dispersal) for details.
+An approach similar to this can also used be used to compute relative abundances from a static transition matrix for a  matrix metapopulation model: in that model the stable distribution between sites already provides a relative abundance estimate, so there is no need for a model to relate the intrinsic growth rate to relative abundance. See [*Dispersal with a static transition matrix*](#static_dispersal) for details.
 
 ##### Notation
 
@@ -346,9 +348,9 @@ Matrix models with static population transition matrices implicitly assume densi
 
 ### Density-dependent vital rates - equilibrium solution
 
-In static transition models considered above, carrying capacity is modelled as some function of the intrinsic growth rate, an relationship which implicitly represents density dependence. Rather than considering that density dependence isa  function of the growth rate, it may be more ecologically realistic to explicitly model the vital rates as being density-dependent - that is having the survival probabilities or fecundity rates at a given time point depend on the population density at the previous time point. This enables incorporation of more detailed ecological knowledge about how vital rates drive abundance, which may be important to consider if the answer to the ecological question of interest depends on density dependence.
+In static transition models considered above, carrying capacity is modelled as some function of the intrinsic growth rate; a relationship which implicitly represents density dependence. Rather than considering that density dependence is a function of the growth rate, it may be more ecologically realistic to explicitly model the vital rates as being density-dependent: that is, having the survival probabilities or fecundity rates at a given time point depend on the population density at the previous time point. This enables incorporation of more detailed ecological knowledge about how vital rates drive abundance, which may be important to consider if the answer to the ecological question of interest depends on density dependence.
 
-Density dependent vital rates can be incorporated in a DSDM by constructing the dynamic population transition matrix $\mathbf{A}_{i,t}$, from dynamic vital rates that are computed as a function of both the environment and the total population (i.e. across all life stages $M$) in the previous time point. For example, these density-dependent relationships could be a linear function of population density - controlled by parameters $\alpha_F$ and $\alpha_S$ - on the link-scale of the vital rates. Where $\alpha_F$ and $\alpha_S$ are negative, density-dependence will lead to self-regulating populations that will ultimately converge on a finite carrying capacity.
+Density dependent vital rates can be incorporated in a DSDM by constructing the dynamic population transition matrix $\mathbf{A}_{i,t}$, from dynamic vital rates that are computed as a function of both the environment and the total population (i.e. across all life stages $M$) in the previous time point. For example, these density-dependent relationships could be a linear function of population density, controlled by parameters $\alpha_F$ and $\alpha_S$ on the link-scale of the vital rates. Where $\alpha_F$ and $\alpha_S$ are negative, density-dependence will lead to self-regulating populations that will ultimately converge on a finite carrying capacity.
 
 Starting with an initial population size vector $\mathbf{n}_{i,0}$, the dynamics can be iterated $T$ times to solve the for the population size at that time $\mathbf{n}_{i,T}$. With self-regulating density-dependence (negative feedback), as $T$ increases $\mathbf{n}_{i,T}$ will approach a stable population size. If $T$ is selected to be sufficiently large that population sizes have stopped changing between iterations (to within some numerical tolerance), $\mathbf{n}_{i,T}$ can be interpreted as the equilibrium relative abundance. As in the static transition matrix models, the parameters $\alpha_F$ and $\alpha_S$ control both the strength of density-dependence and the detection rate, since these parameters are not identified separately.
 
@@ -362,7 +364,7 @@ ln(F_{i,t}) &= \mathbf{X}_i \beta_F + \alpha_F \textstyle\sum_{j=1}^M{\mathbf{n}
 logit(S_{A_{i,t}}) &= \mathbf{X}_i \beta_S + \alpha_S \textstyle\sum_{j=1}^M{\mathbf{n}_{i,j,t}} \\ \nonumber
 logit(S_{J_{i,t}}) &= logit(S_{A_{i,t}}) - \gamma
 \end{align}
-where $\alpha_F$ and $\alpha_S$ are negative scalar parameters controlling the strength of density dependenceadnt he detection rate, and $T$ is positive integer giving a number of iterations chosen such that the population sizes have converged to withing a tolerance, i.e. $|\mathbf{n}_{i,T} - \mathbf{n}_{i,T-1}| / \mathbf{n}_{i,T-1} < \epsilon$ for some small positive tolerance $\epsilon$. This criterion means that the value of the initial population sizes $\mathbf{n}_{i,0}$ do not impact upon the model. 
+where $\alpha_F$ and $\alpha_S$ are negative scalar parameters controlling the strength of density dependence and the detection rate, and $T$ is positive integer giving a number of iterations chosen such that the population sizes have converged to within a tolerance, i.e. $|\mathbf{n}_{i,T} - \mathbf{n}_{i,T-1}| / \mathbf{n}_{i,T-1} < \epsilon$ for some small positive tolerance $\epsilon$. This criterion means that the value of the initial population sizes $\mathbf{n}_{i,0}$ do not impact upon the model. 
 
 ##### Code
 
@@ -407,7 +409,7 @@ Lambda <- iterations$stable_population
 
 ### Density-dependent vital rates - non-equilibrium solution
 
-Where the data or questions of the analysis are such that equilibrium population sizes are not representative of the population, the density-dependent vital rate model above can be iterate for predetermined number of timepoints $T$, such that each time $t$ corresponds to an observed time in the distribution data. For example, where the impacts of short-term variation in environmental conditions (environmental stochasticity) on population sizes is important, the transition matrix $\mathbf{A}_{i,t}$ at each time can be computed as a function of the design matrix of observed environmental conditions $\mathbf{X}_t$ at that time, and the current population density. The resulting population size $\mathbf{n}_{i,t}$ at each time $t$ can then be used in an observation model for the observed distribution data at that time $y_{i,t}$.
+Where the data or questions of the analysis are such that equilibrium population sizes are not representative of the population, the density-dependent vital rate model above can be iterated for predetermined number of timepoints $T$, such that each time $t$ corresponds to an observed time in the distribution data. For example, where the impacts of short-term variation in environmental conditions (environmental stochasticity) on population sizes is important, the transition matrix $\mathbf{A}_{i,t}$ at each time can be computed as a function of the design matrix of observed environmental conditions $\mathbf{X}_t$ at that time, and the current population density. The resulting population size $\mathbf{n}_{i,t}$ at each time $t$ can then be used in an observation model for the observed distribution data at that time $y_{i,t}$.
 
 Under this formulation, the population size parameters $\mathbf{n}_{i,t}$ will be affected by the initial population state $\mathbf{n}_{i,0}$. This can either be introduced as an unknown parameter in the model, or set to an arbitrary value but with the considered time period set so that there is a sufficiently long 'burn-in' period prior to the first observation that its value has little effect on the estimated model parameters.
 
