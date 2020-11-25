@@ -28,7 +28,7 @@ knitr::opts_chunk$set(message = FALSE,
 
 This appendix provides statistical notation and computer code for the R packages greta and greta.dynamics [@goldingGretaDynamicsModelling2019; @goldingGretaSimpleScalable2019] to implement the broad range of DSDMs proposed in the manuscript *Demographic Species Distribution Models* by Nick Golding.
 
-Each section below details a modelling option for a specific component of the DSDM - the observation model, abundance model, or population dynamic model. These components are largely inter-operable; a user can pick one modelling option from each category that best fits the ecology of the species of interest and the ecological question at hand. The one exception to this is that abundance models using as input the intrinsic growth rate of the species (the Beverton-Holt model in the manuscript example, and the Ricker model introduced here) cannot be used in combination with the population dynamic models that have either dynamic transition matrices or dispersal, since those population dynamic models do not yield a separate intrinsic growth rate for each site. With those models, the relative abundance is instead calculated directly from the dynamics, so these abundance models are not needed.
+Each section below details a modelling option for a specific component of the DSDM: the observation model, abundance model, or population dynamic model. These components are largely inter-operable; a user can pick one modelling option from each category that best fits the ecology of the species of interest and the ecological question at hand. The one exception to this is that abundance models using as input the intrinsic growth rate of the species (the Beverton-Holt model in the manuscript example, and the Ricker model introduced here) cannot be used in combination with the population dynamic models that have either dynamic transition matrices or dispersal, since those population dynamic models do not yield a separate intrinsic growth rate for each site. With those models, the relative abundance is instead calculated directly from the dynamics, so these abundance models are not needed.
 
 This appendix only considers the structures of the proposed models, specification of priors for parameters in the models are not discussed here. See [@goldingGretaSimpleScalable2019] and the website [greta-stats.org](https://greta-stats.org) for general guidance on how to build models with greta. I reiterate here that the aim of DSDMs is to incorporate ecological knowledge via informative priors, and the parameters of the proposed models are unlikely to be identified with uninformative priors.
 
@@ -54,6 +54,8 @@ logit(S_{J_i}) &= logit(S_{A_i}) - \gamma
 \end{align}
 
 where $y$ is a vector of length $N$ giving the presence or absence of the species at site $i$, $eigval(\mathbf{A}_i)$ denoted the dominant eigenvalue of the population transition matrix at site $i$; the intrinsic growth rate of that population, $\mathbf{X}$ a $N$x$K$ design matrix of the values of environmental covariates at each site, an intercept (coded as a column of all ones), and any transformations of those covariates, $\beta_F$ and $\beta_S$ are parameter vectors of length $K$ giving regression coefficients for the log-fecundity and logit-survival submodels respectively, $\gamma$ is a positive scalar parameter for the logit-difference between adult and juvenile survival, and $\alpha$ is a positive scalar parameter for the combined effects of imperfect detection and the relationship between the intrisic growth rate and abundance in the Beverton-Holt model.
+
+**$K$ is used both for site carrying capacity and number of covariates?**
 
 ##### Code
 
@@ -88,11 +90,11 @@ distribution(y) <- bernoulli(p)
 
 # Observation models
 
-Below I provide alternative observation models for presence-absence, count, and presence-only species distribution data, linking their parameters to the variable $\Lambda_i$ representing relative abundance at site $i$. These observation models can also be extended to distribution data that are disaggregated by time, stage, species, or genotype by iterating over the appropriate index. A wider range of observation models for distribution data - such as that for disentangling occupancy and detection - can be implemented using other greta extension packages, but are beyond the scope of this manuscript. Similarly, observation models for demographic data (e.g. for an integrated population modelling approach) could be included, but are not considered here, since the focus of this paper is the types of data typically used for statistical modelling of species distributions.
+Below I provide alternative observation models for presence-absence, count, and presence-only species distribution data, linking their parameters to the variable $\Lambda_i$ representing relative abundance at site $i$. These observation models can also be extended to distribution data that are disaggregated by time, stage, species, or genotype by iterating over the appropriate index. A wider range of observation models for distribution data &mdash; such as that for disentangling occupancy and detection &mdash; can be implemented using other greta extension packages, but are beyond the scope of this manuscript. Similarly, observation models for demographic data (e.g. for an integrated population modelling approach) could be included, but are not considered here, since the focus of this paper is the types of data typically used for statistical modelling of species distributions.
 
 ## Presence-absence data
 
-Presence-absence data $y_i$ are assumed to be independently Bernoulli-distributed following a probability of presence $p_i$, as in a standard presence-absence species distribution model. This probability of presence can be calculated from the relative abundance by considering the presence-absencve data as arising from a truncation of count data: the species recorded as present if one or more individuals were detected, or otherwise a absent. By assuming that count follow a Poisson distribution with expected value $\Lambda_i$, the probability of species presence (a count greater than 0) is given by $1-e^{-\Lambda_i}$. This is equivalent to the likelihood of a GLM for binary data with complementary log-log link function and linear predictor $ln(\Lambda_i)$.
+Presence-absence data $y_i$ are assumed to be independently Bernoulli-distributed following a probability of presence $p_i$, as in a standard presence-absence species distribution model. This probability of presence can be calculated from the relative abundance by considering the presence-absence data as arising from a truncation of count data: the species recorded as present if one or more individuals were detected, or otherwise a absent. By assuming that counts follow a Poisson distribution with expected value $\Lambda_i$, the probability of species presence (a count greater than 0) is given by $1-e^{-\Lambda_i}$. This is equivalent to the likelihood of a GLM for binary data with complementary log-log link function and linear predictor $ln(\Lambda_i)$.
 
 ##### Notation
 
@@ -115,7 +117,7 @@ distribution(y) <- bernoulli(p)
 
 ## Poisson count data
 
-The relative abundance variable $Lambda_i$ is the parameter of the Poisson distribution, so a Poisson count model is simply given by:
+The relative abundance variable $\Lambda_i$ is the parameter of the Poisson distribution, so a Poisson count model is simply given by:
 
 ##### Notation
 
@@ -163,8 +165,9 @@ distribution(y) <- negative_binomial(r, p)
 
 ## Presence-only data
 
-Presence-only data - where records consist of locations where the species has been reported as being present - can be considered as a thinned, inhomogeneous Poisson point process [@wartonPoissonPointProcess2010;@rennerPointProcessModels2015]. The likelihood for this model comprises an intractable integral over the study area, which can be approximated in a number of ways that reduce the model to having a Poisson observation model. Here I apply the piece-wise constant approximation, defining the observations $y_i$ to be counts of occurrence records in each cell $i$, having area $a_i$, where the cells represent a partition of the study area [@diggleSpatialSpatioTemporalLogGaussian2013;@simpsonGoingGridComputationally2011]. That is they tessellate (but do not overlap) and together cover the entire study area.
+Presence-only data &mdash; where records consist of locations where the species has been reported as being present &mdash; can be considered as a thinned, inhomogeneous Poisson point process [@wartonPoissonPointProcess2010;@rennerPointProcessModels2015]. The likelihood for this model comprises an intractable integral over the study area, which can be approximated in a number of ways that reduce the model to having a Poisson observation model. Here I apply the piece-wise constant approximation, defining the observations $y_i$ to be counts of occurrence records in each cell $i$, having area $a_i$, where the cells represent a partition of the study area [@diggleSpatialSpatioTemporalLogGaussian2013;@simpsonGoingGridComputationally2011]. That is they tessellate (but do not overlap) and together cover the entire study area.
 Under this definition, the DSDM relative abundance parameter $\Lambda_i$ represents a density of point observations per unit area (assumed to be homogeneous across cell $i$) that *would* be seen if there were no spatial bias in rates of reporting. The expected number of presence-only observations in each cell is therefore the product of the relative abundance $\Lambda_i$, the area $a_i$, and a relative measure of the bias in reporting, $\tau_i$ (also assumed homogeneous across each cell). Values of $\tau_i$ for each location can be provided as data, or estimated during model-fitting via an additional regression sub-model against detection covariates. Since $\Lambda_i$ is only identified to within a multiplicative constant ($\alpha$ in Equation 2), the absolute value of $\tau_i$ is not identified in this model, so any model for $\tau_i$ should probably not have an intercept term. 
+
 
 ##### Notation
 
@@ -197,7 +200,7 @@ Poisson(\alpha^* \Lambda_i) , & \text{otherwise}
 p_i &= 1 - e^{-\Lambda_i}
 \end{align}
 
-where $z_i$ is an indicator variable for whether the observation $y_i$ represents presence-absence or count data, and $\alpha^*$ is a detection rate parameter - in addition to the $\alpha$ used to define $\Lambda_i$- giving the detectability of individuals in the surveys yielding the count data, relative to that in the surveys yielding the presence-absence data.
+where $z_i$ is an indicator variable for whether the observation $y_i$ represents presence-absence or count data, and $\alpha^*$ is a detection rate parameter &mdash; in addition to the $\alpha$ used to define $\Lambda_i$ &mdash; giving the detectability of individuals in the surveys yielding the count data, relative to that in the surveys yielding the presence-absence data.
 
 ##### Code
 
@@ -238,7 +241,7 @@ The Beverton-Holt model of population dynamics for single (not stage-structured)
 n_{i,t+1} &= \frac{\lambda_i n_{i,t}}{1 + n_{i,t} / M}
 \end{align}
 
-where $\lambda_i$ is the intrinsic growth rate of the population (which can be calculated as the dominant eigenvalue of $\mathbf{A}_i$), and $M$ is a scaling factor implicitly representing density-dependent effects. The carrying capacity of the Beverton-Holt model is given by $(\lambda_i - 1) M$, which we assume to be be proportional to the relative abundance that we can observee via species distribution data (assuming the population is at equilibrium), with the constant of proportionality being a per-individual detection rate - the fraction of individuals in the population detected in the survey from which we obtained our distribution data. This detection rate is not identified from the density-dependence parameter $M$, so we replace their product with the parameter $\alpha$ to yield the theoretical relative carrying capacty parameter $K_i = (\lambda_i - 1) \alpha$. An unfortunate consequence of this simple relationship is that $K_i$ is negative when $\lambda_i < 1$, and thus not a valid population size. It is therfore rectified (forced to be positive) by the softplus function to give the relative abundance $\Lambda_i = ln(1 + e^{K_i})$, so that $\Lambda_i$ is close to zero when $\lambda_i < 1$, and approximately equal to $K_i$ when $\lambda_i > 1$. 
+where $\lambda_i$ is the intrinsic growth rate of the population (which can be calculated as the dominant eigenvalue of $\mathbf{A}_i$), and $M$ is a scaling factor implicitly representing density-dependent effects. The carrying capacity of the Beverton-Holt model is given by $(\lambda_i - 1) M$, which we assume to be be proportional to the relative abundance that we can observee via species distribution data (assuming the population is at equilibrium), with the constant of proportionality being a per-individual detection rate; the fraction of individuals in the population detected in the survey from which we obtained our distribution data. This detection rate is not identified from the density-dependence parameter $M$, so we replace their product with the parameter $\alpha$ to yield the theoretical relative carrying capacty parameter $K_i = (\lambda_i - 1) \alpha$. An unfortunate consequence of this simple relationship is that $K_i$ is negative when $\lambda_i < 1$, and thus not a valid population size. It is therfore rectified (forced to be positive) by the softplus function to give the relative abundance $\Lambda_i = ln(1 + e^{K_i})$, so that $\Lambda_i$ is close to zero when $\lambda_i < 1$, and approximately equal to $K_i$ when $\lambda_i > 1$. 
 
 ##### Notation
 
