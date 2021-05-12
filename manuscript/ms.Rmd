@@ -109,51 +109,67 @@ Species distribution modelling is widely used in ecology, with models informing 
 Correlative statistical models, using environmental variables as predictors, are very widely used for predicting species distributions as they describe and interpolate distributions well, with minimal required prior knowledge of the system [@elithSpeciesDistributionModels2009].
 
 However the arbitrary, flexible functional forms of these correlative species distribution models (SDMs) make them poor at predicting to novel conditions [@dormannCorrelationProcessSpecies2012].
-Moreover, models of species distributions are often needed to predict new distributions in response to changes other than the environmental predictors that correlative SDMs rely upon. For instance
+Moreover, models of species distributions are often needed to predict new distributions in response to changes other than the environmental predictors that correlative SDMs rely upon. For instance <the impact of a novel pathogen or the introduction of a competitor, on a species' distribution and abundance.>
 
-Whilst users typically have some knowledge of the processes driving these aspects of species distributions &mdash; such as the species' life history, approximate survival and fecundity rates or dispersal ability &mdash; incorporating this knowledge into correlative statistical models is problematic.
+Whilst users typically have some knowledge of the processes driving these aspects of species distributions &mdash; such as the species' life history, approximate survival and fecundity rates or dispersal ability &mdash; it is not generally possible to incorporate this knowledge into correlative statistical models in a principled way.
 On the other hand, ecologists rarely have enough information to accurately predict species distributions from their knowledge of the species life history and demographics alone, since quantifying how vital rates vary over space typically requires large-scale long-term field studies [@merowUsingIntegralProjection2014] or detailed physiological modelling [@kearneyModellingSpeciesDistributions2008].
 
-When no single modelling approach is available that fits their needs, species distribution modellers needing to incorporate more ecological mechanism into their predictions must employ a number of tricks to shoehorn their ecological knowledge into correlative SDMs.
+When no single modelling approach is available that fits their needs, species distribution modellers that require more ecological mechanism in their predictions may rely on a number of tricks to shoehorn their ecological knowledge into correlative SDMs.
 For instance, manipulating distribution data to remove the signal of dispersal limitation before model fitting [@elithArtModellingRangeshifting2010], or treating correlative SDM predictions as a proxy for habitat carrying capacity in a secondary spatial population simulation model [@andersonDynamicsRangeMargins2009].
 Whilst these approaches can be effective, they often make strong and questionable assumptions (for example about the relationship between habitat suitability and carrying capacity) and require the modeller to focus on implementation details, rather than the ecology of the species they are studying.
-Models that explicitly consider the demographic processes relevant to distribution modelling task in hand are therefore appealing.
+Models that explicitly consider the demographic processes relevant to the distribution modelling task in hand are therefore appealing.
 
-A number of models have been made to improve the realism in species distribution models, whilst still enabling them to be fitted to the distribution data that are commonly available.
-For example, dynamic range models (DRMs) extend correlative SDMs by explicitly modelling dispersal processes and spatial variation in population growth rates [@pagelForecastingSpeciesRanges2012].
+Models have been proposed to improve the realism in species distribution models, whilst still enabling them to be fitted to the distribution data that are commonly available.
+Dynamic range models (DRMs) extend correlative SDMs by explicitly modelling dispersal processes and spatial variation in population growth rates [@pagelForecastingSpeciesRanges2012].
 DRMs model population growth rates using a correlative model and environmental covariates, just as a correlative SDM models the abundance or probability of presence of a species. 
 DRMs can also be fitted to distribution data, though they are intended for use with time series of abundance or presence-only data, since repeat observations are needed to accurately quantify population growth rates and dispersal.
 
-Because they do not model vital rates directly DRMs, like correlative SDMs, are unable to predict the impact on distributions of a change &mdash; for example a conservation intervention like predator control &mdash; that affects a single vital rate.
+Because they do not model vital rates or population dynamic processes directly, DRMs, like correlative SDMs, are unable to predict the impact on distributions of a change that affects a single vital rate (e.g. only survival or only fecundity).
+It is also not possible to extend DRMs to incorporate important population dynamic processes other than dispersal - such as density dependence, seed-banks, biotic interactions, and evolution.
 
-<explicitly modelling vital rates, because it's useful>
+By contrast to DRMs, matrix population models and their recently developed extension integral projection models (IPMs) are demographic models of the dynamics of a population at a single location.
+Both approach focus on the construct and analysis of a transition matrix (or kernel) representing key demographic processes [@merowAdvancingPopulationEcology2014].
+Spatial IPMs^[Note that @merowUsingIntegralProjection2014 use the term 'demographic distribution model' to describe their spatial application of an integral projection model, however since that title could be applied to a very broad range of models including the approach introduced in this paper, we use the term spatial integral projection model to refer to their approach] extend this idea to map distributions by modelling demographic rates as a function of covariates, then analysing transition matrices under different conditions to map emergent demographic quantities (such as the intrinsic growth rate) to characterize the distribution of a species [@merowUsingIntegralProjection2014].
+Spatial IPMs require data on vital rates at a number of sites, in order to be able to characterise how vital rates vary as a function of multiple spatial covariates.
+Such data are unlikely to be available for modelling most species, restricting the applicability of this approach to a small subset of distribution modelling applications.
 
-<MPMs & IPMs do this at a single location - widely used in ecology, and even whole databases available>
-
-By contrast, matrix population models and integral projection models (IPMs) are demographic models of single populations that construct and analyse a transition matrix representing key demographic processes [@merowAdvancingPopulationEcology2014].
-Spatial IPMs extend this idea to map distributions by modelling demographic rates as a function of covariates, then analysing transition matrices under different conditions to map emergent demographic quantities (such as the intrinsic growth rate) to characterize the distribution of a species [@merowUsingIntegralProjection2014].
-
-<SIPMs (DDMs in Merow - note on nomenclature) apply these to large spatial scales. Whilst they rely on vast amnounts field data (so are not applicable in most SDM situations), they provide a link between demography and distribution, making it possible to perform statistical inference on them using distribution data. This is what I call a DSDM - the subject of this manuscript.>
+However, spatial IPMs provide a mechanistic mathematical link between environmental covariates, demography, and distributions, making it possible to perform statistical inference on these spatially-varying vital rates from distribution data.
+I refer to this framework of fitting a spatially-varying MPM or IPM to distribution data as a demographic species distribution model.
+This approach draws on the strengths of both DRMs and spatial IPMs (and indeed includes both as special cases), enabling the user to make use of both demographic data and distribution data, to the extent that either is available for the target species.
 
 Whilst the concept is simple, it is not obvious that multiple spatial surfaces (vital rate distributions) can be inferred from a single spatial dataset of a species' distribution.
 Nor is it obvious that such a model can be fitted to data with sufficiently ease and speed to be useful to ecologists.
-The rest of this manuscript addresses these issues, introducing the basic model and describing a number of potential extensions.
-Example 1 illustrates a basic DSDM for presence/absence distribution data, requiring minimal prior knowledge and demonstrates that spatial variation in the two different vital rates can indeed be disentangled.
-Example 2 then develops a more complex DSDM incorporating detailed knowledge of a species' ecology, and illustrates that the relationships between vital rates and environmental variables learned from distribution data do broadly agree with field-derived estimates.
-
+The rest of this manuscript addresses these issues, introducing both a basic model and a more complex example, and describing a number of potential extensions.
 
 # Demographic Species Distribution Models
 
-<general equations - a number of options for observation models>
-<blame link between growth rate and probability of presence on Jorn, point reader to section on extensions for density-dependent solution>
-<suggest doing Bayesian inference - propagate uncertainty and incorporate any prior information to help the model disentangle the spatial signal>
+## Defining the model
+
+In correlative species distribution modelling, the analyst begins by selecting a statistical or machine-learning modeling framework that is appropriate to the data type and is thought to perform well.
+By contrast, the construction of a DSDM begins with the selection of a population matrix structure that is appropriate to represent relevant aspects of the population dynamics of the species, and the questions being asked of the model.
+For example, in a species where vital rates strongly depend on the age or size of individuals, a matrix model representing multiple life stages structured by age or size would likely be appropriate.
+If an aim of the analysis relates to the dispersal of the species (e.g. a range-shifting species), then explicit consideration of of dispersal in the momdel would be warranted.
+
+The intention of this paper is to introduce and demonstrate a general modelling approach and related class of models, rather than proposing a single matrix structure that would be expected to apply in all cases.
+In this sense, the proposed DSDM framework is akin to mathematical modelling, rather than correlative statistical modelling.
+However, a number of different features of population dynamics can easily be included in DSDMs, in a modular way.
+The DSDM structure given in equations 2-3 is simple version for presence-absence data which makes a number of assumptions about the species ecology.
+This structure can easily be extended to accommodate alternative data types and demographic processes, and answer a range of ecological questions, by extending this basic model in a modular way.
+These extensions are discussed below.
+The appendix provides notation and code for fitting a number of models that can be fitted within this framework, capturing a wide range of ecological processes including: density dependence, non-stationary population dynamics, dispersal and non-equilibrium distributions, biotic interactions and evolutionary dynamics.
+
+Whilst statistical inference against distribution data could be performed on almost any demographic model, I restrict the models discussed here to those that are both based on transition matrices, and amenable to efficient MCMC methods.
+By taking a Bayesian approach, analysts are able to incorporate ecological knowledge into models, but also account for uncertainty in this knowledge and allow assumptions to be updated on fitting to distribution data.
+Fitting by MCMC also fully captures uncertainty about model parameters (poor model identifiability) and propagates it into predictions, which can be important where a species' dstribution can be equally well explained by the same spatial pattern applied to one or other vital rate models.
+This constrains the considered class of models to those with likelihoods that are tractable (the exact value of likelihood can be computed from the parameters and data), and can be differentiated with respect to parameter values.
+This enables the use of modern gradient-based MCMC samplers [@monnahanFasterEstimationBayesian2017], though it necessarily restricts the scope of these models to those with only continuous parameters.
+The model variations I propose encompass a wide range of features whilst remaining within these constraints, and can also make use of efficient vectorised and linear algebra routines, meaning that they should scale well to the large datasets commonly used for fitting SDMs.
 
 ```{r schematic, echo = FALSE, fig.cap = "Demographic species distribution models in the context of other models of distribution and demography. A) Correlative species distribution models (SDMs) use a correlative mathematical relationship - such as a logit-linear model - to predict a species' distribution from spatial covariates. The predicted distribution (for a given set of parameter values) is compared to observed distribution data using an observation model - such as a Bernoulli distribution, for presence-absence data. Statistical inference is performed to infer the correlative model parameters from the distribution data. B) Matrix population models (MPMs) and integral projection models (IPMs) combine either direct estimates, or correlative models, of vital rates like survival and fecundity to predict demographic quantities such as the population growth rate. Spatial IPMs apply these models to covariate values at each pixel in the landscape, and therefore map the distributions of vital rates and species. Unlike correlative SDMs, the parameters of MPMs, IPMs, and spatial IPMs are inferred from data on population dynamics at specific locations, rather than distribution data. Demographic SDMs (proposed here) combine correlative SDMs and spatial IPMs; replacing the arbitrary correlative model in a correlative SDM with an MPM or IPM, and inferring model parameters by fitting the whole model statistically to observed distributions. Equations correspond roughly to the model considered in Example 1, but represent a wide range of correlative, population dynamic, and observation models that could be used in this framework, with choice of function $f()$ dictating the relationship between the species' transition matrix and relative abundance.", out.width = "\\textwidth"}
 knitr::include_graphics("../figures/schematic.png")
 ```
 
-
-# Example 1. A DSDM for the Carolina Chickadee
+## Example 1. A DSDM for the Carolina Chickadee
 
 This section demonstrates the construction, fitting and analysis of a basic DSDM the Carolina Chickadee *Poecile carolinensis*, a small passerine bird, for the contiguous USA.
 A two-stage matrix population model for the species has previously been developed [@ryuDevelopingPopulationModels2016], and used to carry out a population viability analysis. Fecundity and survival rates for adults and juveniles were estimated from mark-recapture data at a number of survey stations across the United States, and represent a single (spatial) average population over the survey stations where the species was detected.
@@ -186,10 +202,10 @@ y_i &\sim Bernoulli(p_i) \\ \nonumber
 p_i &= 1 - e^{-\Lambda_i} \\ \nonumber
 \Lambda_i &= ln(1 + e^{K_i})  \\ \nonumber
 K_i &= (\lambda_i - 1) \alpha \\ \nonumber
-\lambda_i &= eigval(\mathbf{A}_i)
+\lambda_i &= \rho(\mathbf{A}_i)
 \end{align}
 
-where $eigval()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the population at location $i$. The theoretical carrying capacity at each site $K_i$ is computed from the carrying capacity relationship of the Beverton-Holt model. $K_i$ has negative values $\lambda_i < 1$, so it is transformed to an always-positive relative abundance parameter $\Lambda_i$ via the softplus function. The softplus transformation is a smooth version of the Heaviside function (which sets negative values to zero), so $\Lambda_i$ closely approximates $K_i$ for most $lambda_i > 1$, and rapidly approaches zero below $lambda_i = 1$. This formulation is statistically convenient, but as discussed below, DSDMs can incorporate more complex and realistic forms of density-dependence if required. 
+where $\rho()$ denotes the dominant eigenvalue of a symmetric matrix, yielding the intrinsic growth rate $\lambda_i$ of the population at location $i$. The theoretical carrying capacity at each site $K_i$ is computed from the carrying capacity relationship of the Beverton-Holt model. $K_i$ has negative values $\lambda_i < 1$, so it is transformed to an always-positive relative abundance parameter $\Lambda_i$ via the softplus function. The softplus transformation is a smooth version of the Heaviside function (which sets negative values to zero), so $\Lambda_i$ closely approximates $K_i$ for most $lambda_i > 1$, and rapidly approaches zero below $lambda_i = 1$. This formulation is statistically convenient, but as discussed below, DSDMs can incorporate more complex and realistic forms of density-dependence if required. 
 The parameter $\alpha$ controls the relationship between the intrinsic population growth rate and relative abundance. It is a compound of two parameters that are only identified together: the Beverton-Holt density-dependence parameter relating growth rates to carrying capacities; and the detection rate &mdash; the fraction of individuals in the total population that are detected during a presence-absence survey at site $i$.  
 From $\Lambda_i$, we obtain the probability $p_i$ of detecting (one or more individuals of) the species $y_i$, under a poisson sampling distribution [@pagelQuantifyingRangewideVariation2014].
 
@@ -228,13 +244,6 @@ knitr::include_graphics("../figures/bbs_fig.png")
 
 Note that this model could undoubtedly be improved by including more information of the species ecology and vital rates &mdash; for example constraining spatial estimates of fecundity and survival to within a range of plausible values &mdash; via prior distributions or changes to model structure. As with any model, the reliability of these vital rate and distribution predictions will depend on the assumptions made and information provided by the modeller. Unlike in purely correlative models however, these assumptions are made clear by explicitly considering spatially-varying vital rates.
 
-
-# Alternative DSDM specifications
-
-The DSDM structure given in equations 2-3 is simple version for presence-absence data which makes a number of assumptions about the species ecology. This structure can easily be extended to accommodate alternative data types and demographic processes, and answer a range of ecological questions. I detail a number of proposed variants below, and provide full notation and example code in Appendix A.
-
-Whilst statistical inference against distribution data could be performed on almost any demographic model, I restrict the models discussed here to those that are amenable to efficient MCMC methods. Specifically: models with likelihoods that are tractable (the exact value of likelihood can be computed from the parameters and data), and can be differentiated with respect to parameter values. This enables the use of modern gradient-based MCMC samplers [@monnahanFasterEstimationBayesian2017], though it necessarily restricts the scope of these models to those with only continuous parameters. The model variations I propose below encompass a wide range of features whilst remaining within these constraints, and can also make use of efficient vectorised and linear algebra routines, meaning that should scale well to the large datasets commonly used for fitting SDMs.
-
 ## Alternative observation models
 
 DSDMs explicitly consider the density of individuals at each location through the relative abundance variable $\Lambda_i$. This provides a link to the most commonly used observations for modelling species distributions in ecology.
@@ -242,9 +251,11 @@ An observation model for count data can be specified simply by replacing the Ber
 A model for presence-only data can be formed by considering the data as arising from a Poisson point process with $\Lambda_i$ as the intensity at location $i$ [@rennerPointProcessModels2015]. Integration areas for each observation, and a model or prespecified site value for spatial sampling bias can be provided via $\alpha$.
 Similarly, where repeat surveys are available, a model for $\alpha$ can be used to estimate the detection probability as in an occupancy-detection analysis [@mackenzieEstimatingSiteOccupancy2002]. 
 
+<blame link between growth rate and probability of presence on Jorn, point reader to section on extensions for density-dependent solution>
+
 Since these observation models all relate to $\Lambda_i$, multiple likelihoods could be specified to form an *integrated* DSDM to be fitted to multiple datasets. The integration of multiple liklihoods could enable estimation of parameters such as spatial bias in reporting rates of presence-only data, or to leverage datasets which differ in their spatial and temporal extents or informativeness with respect to growth rates and vital rates.
 
-# Temporal dynamics
+## Temporal dynamics
 
 The example DSDM given above is temporally static: the covariate values, vital rate parameters, transition matrix and intrinsic growth rate at each site are assumed to be constant through time.
 Long-term temporal trends driven by changing environmental covariates can be accommodated in this model simply by considering each time point $t$ as an independent set of observations, such that each set of environmaental conditions $\mathbf{X}_{i,t}$ results in a separate transition matrix $\mathbf{A}_{i,t}$ and corresponds to observed responses $y_{i,t}$. This approach assumes the time periods are sufficiently far apart that the populations have returned to the carrying capacity implied by the contemporary environmental conditions.
@@ -258,7 +269,7 @@ N_{i,t} &= \mathbf{A}_{i,t}N_{i,t-1}
 
 where the new variable $N_{t,i}$ gives the expected population size at time $t$. In this formulation of the DSDM, the initial population at each site $N_{0,i}$ must be provided. This could either be specified as a parameter in the model, via a known initial population size, or as an arbitrary fixed value accompanied by a sufficient 'burn in' period that parameter estimates are not influenced.
 
-# Continuous stages
+## Continuous stages
 
 Can use IPMs too...
 
